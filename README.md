@@ -31,19 +31,26 @@
 
 ```
 darechy/
-├── backend/          # FastAPI: API, Telegram-бот, RAG, голосовой шлюз (Python)
+├── backend/              # FastAPI: API, Telegram-бот, RAG, голосовой шлюз (Python)
 │   ├── app/
-│   │   ├── core/     # конфиг (.env)
-│   │   ├── data/     # стабы (каталог услуг до сборки RAG)
-│   │   ├── rag/      # появится в неделе 2: retriever, generator, guardrails
-│   │   ├── voice/    # появится в неделе 3: STT/TTS/VAD
+│   │   ├── core/         # конфиг (.env)
+│   │   ├── models/       # Pydantic-схемы = контракт с фронтендом (api.ts)
+│   │   ├── api/          # REST-роуты: /api/services, /api/situations, /api/chat, /api/voice
+│   │   ├── services/     # каталог услуг (неделя 2: переезд в Postgres)
+│   │   ├── chat/         # RAG-оркестратор с цитатами + роутер услуг
+│   │   ├── retrieval/    # гибридный поиск: BM25 + Qdrant (RRF-фьюжн)
+│   │   ├── kb/           # парсеры актов (docx/pdf) + ingestion корпуса
+│   │   ├── llm/          # клиент Ollama (chat + embeddings)
+│   │   ├── bot/          # Telegram-бот (aiogram 3): текст + голосовые
+│   │   ├── voice/        # STT (faster-whisper) / TTS (Silero) — неделя 3
+│   │   ├── data/         # стабы (каталог услуг до переезда в Postgres)
 │   │   └── main.py
-│   └── tests/
-├── frontend/         # Портал + киоск-режим (React + TypeScript + Vite)
-├── kb_corpus/        # Правовая база: raw/ (оригиналы актов), curated/ (чанки)
-├── eval/             # Golden set: вопросы + эталонные ответы для регресса качества
-├── infra/            # Данные контейнеров (в git не попадают)
-├── docs/             # План, концепция заявки
+│   └── tests/            # pytest: парсер, поиск, оркестратор, API (без сети)
+├── frontend/             # Портал + киоск-режим (React + TypeScript + Vite)
+├── kb_corpus/            # Правовая база: raw/ (оригиналы актов), curated/ (чанки)
+├── eval/                 # Golden set: вопросы + эталонные ответы для регресса качества
+├── infra/                # Данные контейнеров (в git не попадают)
+├── docs/                 # План, концепция заявки
 └── docker-compose.yml
 ```
 
@@ -89,7 +96,15 @@ uvicorn app.main:app --reload
 - http://localhost:8000/docs — автодокументация API (Swagger)
 - http://localhost:8000/api/services — каталог услуг (пока стаб)
 
-Тесты: `pytest -q` · Линтер: `ruff check app tests`
+Тесты: `pytest -q` (23 шт.: парсер актов, BM25/RRF, оркестратор с цитатами, API) · Линтер: `ruff check app tests`
+
+Индексация корпуса (после того как появились `kb_corpus/curated/*.json`):
+
+```bash
+python -m app.kb.ingest    # чанки → индекс; Qdrant поднят → dense-плечо включится само
+```
+
+Без Docker/Qdrant/Ollama всё работает: BM25 + экстрактивные ответы с цитатами (guardrail живой и в деградации).
 
 ### 3. Фронтенд
 

@@ -1,6 +1,10 @@
 from functools import lru_cache
+from pathlib import Path
 
 from pydantic_settings import BaseSettings, SettingsConfigDict
+
+BACKEND_DIR = Path(__file__).resolve().parent.parent.parent
+REPO_DIR = BACKEND_DIR.parent
 
 
 class Settings(BaseSettings):
@@ -18,9 +22,18 @@ class Settings(BaseSettings):
     redis_url: str = "redis://localhost:6379/0"
     qdrant_url: str = "http://localhost:6333"
 
-    # Локальная LLM (неделя 2)
+    # Локальная LLM
     ollama_base_url: str = "http://localhost:11434"
     llm_model: str = "qwen3:8b"
+    # Модель эмбеддингов в Ollama (multilingual-e5-large: `ollama pull dengcao/Qwen3-Embedding` и т.п.)
+    embedding_model: str = "multilingual-e5-large"
+    embedding_dim: int = 1024
+
+    # RAG
+    corpus_dir: Path = REPO_DIR / "kb_corpus" / "curated"
+    retrieval_top_k: int = 6
+    retrieval_score_threshold: float = 0.05
+    use_qdrant: bool = True
 
     # Голос (неделя 3)
     whisper_model: str = "large-v3-turbo"

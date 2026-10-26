@@ -2,8 +2,16 @@
 fastapi>=0.115
 uvicorn[standard]>=0.30
 pydantic-settings>=2.4
+httpx>=0.27
+python-multipart>=0.0.9
+
+# Telegram-бот (текст). Голос (faster-whisper, pypdf) — опционально,
+# импортируются лениво: без них API и текст-бот работают.
+aiogram>=3.13
+
+# Парсинг PDF-актов корпуса
+pypdf>=4
 
 # Dev / тесты / линтер
 pytest>=8
-httpx>=0.27
 ruff>=0.6
