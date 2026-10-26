@@ -1,0 +1,9 @@
+# Рантайм
+fastapi>=0.115
+uvicorn[standard]>=0.30
+pydantic-settings>=2.4
+
+# Dev / тесты / линтер
+pytest>=8
+httpx>=0.27
+ruff>=0.6

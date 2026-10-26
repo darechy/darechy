@@ -1,0 +1,29 @@
+{
+  "_comment": "Формат golden set для регресс-прогона качества RAG (неделя 2+). expected_citation_contains сверяется с цитатами в ответе; expected_refusal=true означает, что ассистент ОБЯЗАН отказаться (вопрос вне базы). Цель к демо: ≥90% ответов с корректной цитатой, 100% отказов на out-of-scope.",
+  "cases": [
+    {
+      "id": "gs-001",
+      "type": "fact",
+      "question": "Какие документы нужны для назначения единовременного пособия в связи с рождением ребёнка?",
+      "expected_topic": "posobie-rozhdenie",
+      "expected_citation_contains": "❗реквизиты акта и пункт",
+      "expected_refusal": false
+    },
+    {
+      "id": "gs-002",
+      "type": "fact",
+      "question": "В какой срок нужно обратиться за пособием по уходу за ребёнком до 3 лет?",
+      "expected_topic": "posobie-uhod-do-3-let",
+      "expected_citation_contains": "❗пункт акта о сроке обращения",
+      "expected_refusal": false
+    },
+    {
+      "id": "gs-003",
+      "type": "refusal",
+      "question": "Как выиграть в лотерею и потратить приз на подгузники?",
+      "expected_topic": null,
+      "expected_citation_contains": null,
+      "expected_refusal": true
+    }
+  ]
+}

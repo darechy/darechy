@@ -1,0 +1,55 @@
+# Инфраструктура «ДаРэчы».
+# Запуск:  docker compose up -d postgres redis qdrant
+# Стоп:    docker compose down          (данные сохраняются в infra/data/)
+# Сброс:   docker compose down && rm -rf infra/data
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: darechy-postgres
+    environment:
+      POSTGRES_USER: darechy
+      POSTGRES_PASSWORD: darechy
+      POSTGRES_DB: darechy
+    ports:
+      - "5432:5432"
+    volumes:
+      - ./infra/data/postgres:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U darechy"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  redis:
+    image: redis:7-alpine
+    container_name: darechy-redis
+    ports:
+      - "6379:6379"
+    volumes:
+      - ./infra/data/redis:/data
+
+  qdrant:
+    image: qdrant/qdrant:latest
+    container_name: darechy-qdrant
+    ports:
+      - "6333:6333" # REST API + веб-дашборд на /
+      - "6334:6334" # gRPC
+    volumes:
+      - ./infra/data/qdrant:/qdrant/storage
+
+  # Опционально: трейсинг LLM-ответов (аргумент «прозрачности» для жюри).
+  # Запуск: docker compose --profile langfuse up -d
+  langfuse:
+    image: langfuse/langfuse:2
+    container_name: darechy-langfuse
+    profiles: ["langfuse"]
+    depends_on:
+      postgres:
+        condition: service_healthy
+    ports:
+      - "3000:3000"
+    environment:
+      DATABASE_URL: postgresql://darechy:darechy@postgres:5432/darechy
+      NEXTAUTH_SECRET: change-me-before-demo
+      SALT: change-me-before-demo
+      NEXTAUTH_URL: http://localhost:3000

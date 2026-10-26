@@ -1,0 +1,308 @@
+/* ДаРэчы — стартовая дизайн-система.
+   Кент: дальше можно перевести на Tailwind или оставить чистый CSS — решай сам.
+   Класс .kiosk (добавим на <html> при ?kiosk=1, неделя 3) увеличивает шрифты и тач-цели. */
+
+:root {
+  --bg: #f6f8fb;
+  --surface: #ffffff;
+  --text: #17222e;
+  --muted: #5b6b7b;
+  --primary: #0b6bcb;
+  --primary-dark: #084e97;
+  --accent: #e8b331;
+  --border: #dde5ee;
+  --radius: 14px;
+  --shadow: 0 2px 10px rgba(23, 34, 46, 0.07);
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  font-family:
+    system-ui,
+    -apple-system,
+    "Segoe UI",
+    Roboto,
+    "Helvetica Neue",
+    Arial,
+    sans-serif;
+  background: var(--bg);
+  color: var(--text);
+  line-height: 1.55;
+}
+
+.container {
+  max-width: 1080px;
+  margin: 0 auto;
+  padding: 0 20px;
+}
+
+.muted {
+  color: var(--muted);
+}
+
+/* --- Шапка --- */
+.header {
+  background: var(--surface);
+  border-bottom: 1px solid var(--border);
+  position: sticky;
+  top: 0;
+  z-index: 10;
+}
+
+.header-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  height: 64px;
+  gap: 16px;
+}
+
+.logo {
+  font-size: 24px;
+  font-weight: 800;
+  color: var(--primary-dark);
+  text-decoration: none;
+  letter-spacing: 0.5px;
+}
+
+.nav {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+}
+
+.nav a {
+  color: var(--text);
+  text-decoration: none;
+}
+
+.nav a:hover {
+  color: var(--primary);
+}
+
+/* --- Кнопки --- */
+.btn {
+  border: none;
+  border-radius: 10px;
+  padding: 10px 18px;
+  font-size: 15px;
+  cursor: pointer;
+  transition: background 0.15s ease;
+}
+
+.btn-lg {
+  padding: 14px 26px;
+  font-size: 17px;
+}
+
+.btn-primary {
+  background: var(--primary);
+  color: #fff;
+}
+
+.btn-primary:hover {
+  background: var(--primary-dark);
+}
+
+.btn-outline {
+  background: transparent;
+  border: 1.5px solid var(--primary);
+  color: var(--primary);
+  text-decoration: none;
+}
+
+.btn-ghost {
+  background: transparent;
+  color: var(--muted);
+  border: 1px solid var(--border);
+}
+
+/* --- Хиро --- */
+.hero {
+  background:
+    radial-gradient(1200px 400px at 80% -50%, rgba(232, 179, 49, 0.25), transparent),
+    linear-gradient(180deg, #eaf2fb 0%, var(--bg) 100%);
+  padding: 64px 0;
+}
+
+.hero h1 {
+  font-size: clamp(32px, 5vw, 52px);
+  line-height: 1.15;
+  margin: 0 0 16px;
+  max-width: 720px;
+}
+
+.hero .accent {
+  color: var(--primary);
+}
+
+.hero-sub {
+  font-size: 19px;
+  color: var(--muted);
+  max-width: 640px;
+  margin: 0 0 28px;
+}
+
+.hero-actions {
+  display: flex;
+  gap: 14px;
+  flex-wrap: wrap;
+}
+
+/* --- Секции --- */
+.section {
+  padding: 48px 0;
+}
+
+.section h2 {
+  margin: 0 0 6px;
+  font-size: 30px;
+}
+
+.section-sub {
+  color: var(--muted);
+  margin: 0 0 24px;
+}
+
+.grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+  gap: 16px;
+}
+
+.card {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow);
+  padding: 20px;
+}
+
+.card-disabled {
+  opacity: 0.55;
+}
+
+.situation {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  position: relative;
+  cursor: default;
+}
+
+.situation.active {
+  cursor: pointer;
+  border-color: var(--primary);
+}
+
+.situation.active:hover {
+  box-shadow: 0 4px 18px rgba(11, 107, 203, 0.18);
+}
+
+.situation-icon {
+  font-size: 34px;
+}
+
+.situation-title {
+  font-weight: 700;
+  font-size: 18px;
+}
+
+.situation-hint {
+  color: var(--muted);
+  font-size: 14px;
+}
+
+.badge {
+  position: absolute;
+  top: 14px;
+  right: 14px;
+  background: var(--accent);
+  color: #4a3608;
+  font-size: 12px;
+  font-weight: 700;
+  padding: 3px 10px;
+  border-radius: 999px;
+}
+
+/* --- Услуги --- */
+.service-list {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.service summary {
+  cursor: pointer;
+  font-size: 17px;
+}
+
+.service-facts {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: 12px;
+  margin: 16px 0;
+}
+
+.service-facts dt {
+  font-size: 13px;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--muted);
+}
+
+.service-facts dd {
+  margin: 2px 0 0;
+}
+
+.checklist li,
+.sources li {
+  margin-bottom: 8px;
+}
+
+.checklist,
+.sources {
+  padding-left: 20px;
+}
+
+.sources a {
+  color: var(--primary);
+}
+
+/* --- Ошибка API --- */
+.api-error {
+  background: #fff3f0;
+  border: 1px solid #f0c4b8;
+  border-radius: var(--radius);
+  padding: 16px 20px;
+  color: #8a3324;
+}
+
+.api-error code {
+  background: #fff;
+  padding: 2px 6px;
+  border-radius: 6px;
+}
+
+/* --- Футер --- */
+.footer {
+  border-top: 1px solid var(--border);
+  background: var(--surface);
+  padding: 28px 0 40px;
+  margin-top: 32px;
+  font-size: 14px;
+}
+
+/* --- Киоск (неделя 3): ?kiosk=1 --- */
+.kiosk {
+  font-size: 20px;
+}
+
+.kiosk .btn {
+  min-height: 56px;
+  font-size: 20px;
+}
