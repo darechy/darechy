@@ -40,8 +40,8 @@ export function Icon({ name, size = 24 }: { name: IconName; size?: number }) {
 export function BrandMark({ size = 30 }: { size?: number }) {
   return (
     <svg viewBox='0 0 32 32' width={size} height={size} aria-hidden='true' focusable='false'>
-      <rect width='32' height='32' rx='9' fill='var(--primary)' />
-      <path d='M9 16.5l4.5 4.5L23 11.5' fill='none' stroke='#fff' strokeWidth='3' strokeLinecap='round' strokeLinejoin='round' />
+      <path d='M16 2l14 14-14 14L2 16z' fill='var(--primary)' />
+      <path d='M16 9l7 7-7 7-7-7z' fill='var(--bg)' />
     </svg>
   );
 }
