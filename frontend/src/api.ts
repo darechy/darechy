@@ -1,5 +1,4 @@
-// Типы каталога услуг — зеркалят backend/app/data/services_stub.json.
-// Когда каталог переедет в Postgres (неделя 2), контракт должен остаться тем же.
+// Типы зеркалят backend/app/models/schemas.py. Менять синхронно с бэкендом.
 
 export type ChecklistItem = {
   item: string;
@@ -8,8 +7,8 @@ export type ChecklistItem = {
 
 export type Source = {
   title: string;
-  url?: string;
-  point?: string;
+  url?: string | null;
+  point?: string | null;
 };
 
 export type Service = {
@@ -24,10 +23,72 @@ export type Service = {
   sources: Source[];
 };
 
-export async function fetchServices(): Promise<Service[]> {
-  const res = await fetch("/api/services");
-  if (!res.ok) {
-    throw new Error(`API вернул ${res.status}`);
+export type Situation = {
+  id: string;
+  title: string;
+  service_ids: string[];
+};
+
+export type Citation = {
+  chunk_id: string;
+  doc_title: string;
+  doc_number?: string | null;
+  doc_date?: string | null;
+  location?: string | null;
+  url?: string | null;
+  quote: string;
+};
+
+export type ChatResponse = {
+  answer: string;
+  citations: Citation[];
+  refusal: boolean;
+  suggested_services: string[];
+  latency_ms: number;
+};
+
+export type ChatRequest = {
+  message: string;
+  session_id?: string;
+  service_id?: string;
+  top_k?: number;
+};
+
+async function readError(res: Response): Promise<string> {
+  try {
+    const body = await res.json();
+    if (typeof body?.detail === "string") return body.detail;
+    if (typeof body?.detail?.reason === "string") return body.detail.reason;
+  } catch {
+    // тело не JSON — отдаём статус
   }
-  return res.json();
+  return `API вернул ${res.status}`;
+}
+
+async function getJson<T>(url: string): Promise<T> {
+  const res = await fetch(url);
+  if (!res.ok) throw new Error(await readError(res));
+  return res.json() as Promise<T>;
+}
+
+export const fetchServices = () => getJson<Service[]>("/api/services");
+export const fetchSituations = () => getJson<Situation[]>("/api/situations");
+
+export async function postChat(body: ChatRequest): Promise<ChatResponse> {
+  const res = await fetch("/api/chat", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(body),
+  });
+  if (!res.ok) throw new Error(await readError(res));
+  return res.json() as Promise<ChatResponse>;
+}
+
+export async function transcribe(blob: Blob): Promise<string> {
+  const form = new FormData();
+  form.append("file", blob, "voice.webm");
+  const res = await fetch("/api/voice/transcribe", { method: "POST", body: form });
+  if (!res.ok) throw new Error(await readError(res));
+  const data = (await res.json()) as { text: string };
+  return data.text;
 }

@@ -1,176 +1,165 @@
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 
-import { fetchServices, type Service } from "./api";
+import Assistant, { type AssistantRequest } from "./Assistant";
+import { fetchServices, fetchSituations } from "./api";
+import { AppCtx, type OpenAssistantOptions } from "./context";
+import { useAsync } from "./hooks";
+import { LangCtx, useT, type Lang } from "./i18n";
+import { Home, ServicePage, SituationPage } from "./pages";
+import { useRoute } from "./router";
 
-// Каркас главной страницы портала «ДаРэчы».
-// Дальше (кент, неделя 1–2): роутинг (/ситуация/:id, /услуга/:id), ассистент-панель,
-// киоск-режим (?kiosk=1 — крупный шрифт + голосовой ввод), переключатель RU/BE.
+const IDLE_MS = 120_000;
+const KIOSK = new URLSearchParams(window.location.search).get("kiosk") === "1";
 
-type ApiState =
-  | { kind: "loading" }
-  | { kind: "error"; message: string }
-  | { kind: "ok"; services: Service[] };
+function storedLang(): Lang {
+  try {
+    return localStorage.getItem("darechy:lang") === "be" ? "be" : "ru";
+  } catch {
+    return "ru";
+  }
+}
 
-const LIFE_SITUATIONS = [
-  { id: "rozhdenie-rebenka", icon: "👶", title: "Родился ребёнок", hint: "Пособия, выплаты, документы за 5 минут", active: true },
-  { id: "poterya-dokumentov", icon: "🪪", title: "Потерял документы", hint: "Паспорт, права, свидетельства", active: false },
-  { id: "pensia", icon: "👴", title: "Выход на пенсию", hint: "Какие справки и когда", active: false },
-  { id: "ip", icon: "💼", title: "Открыл своё дело", hint: "ИП, самозанятость, налоги", active: false },
-  { id: "lgoty", icon: "🏠", title: "Льготы и субсидии", hint: "ЖКХ, транспорт, лекарства", active: false },
-  { id: "spravki", icon: "📄", title: "Справки и выписки", hint: "Где взять, сколько ждёт", active: false },
-];
+function Shell() {
+  const { t, lang, setLang } = useT();
+  const { route, hash } = useRoute();
+  const services = useAsync(fetchServices);
+  const situations = useAsync(fetchSituations);
+  const [open, setOpen] = useState(false);
+  const [request, setRequest] = useState<AssistantRequest>(null);
+  const [session, setSession] = useState(0);
 
-export default function App() {
-  const [api, setApi] = useState<ApiState>({ kind: "loading" });
+  const openAssistant = useCallback((options?: OpenAssistantOptions) => {
+    setRequest((prev) => ({ text: options?.text, serviceId: options?.serviceId, nonce: (prev?.nonce ?? 0) + 1 }));
+    setOpen(true);
+  }, []);
+  const closeAssistant = useCallback(() => setOpen(false), []);
 
   useEffect(() => {
-    fetchServices()
-      .then((services) => setApi({ kind: "ok", services }))
-      .catch((err: unknown) =>
-        setApi({
-          kind: "error",
-          message: err instanceof Error ? err.message : String(err),
-        }),
-      );
+    document.documentElement.classList.toggle("kiosk", KIOSK);
   }, []);
 
+  useEffect(() => {
+    document.documentElement.lang = lang;
+  }, [lang]);
+
+  useEffect(() => {
+    if (route.name === "home" && route.section) {
+      const target = route.section;
+      requestAnimationFrame(() => document.getElementById(target)?.scrollIntoView({ behavior: "smooth" }));
+    } else {
+      window.scrollTo(0, 0);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [hash]);
+
+  // Киоск: после паузы сбрасываем экран и диалог — следующий посетитель начинает с нуля.
+  useEffect(() => {
+    if (!KIOSK) return;
+    let timer = 0;
+    const reset = () => {
+      setOpen(false);
+      setRequest(null);
+      setSession((s) => s + 1);
+      if ("speechSynthesis" in window) window.speechSynthesis.cancel();
+      if (window.location.hash && window.location.hash !== "#/") window.location.hash = "#/";
+    };
+    const bump = () => {
+      window.clearTimeout(timer);
+      timer = window.setTimeout(reset, IDLE_MS);
+    };
+    const events = ["pointerdown", "keydown", "touchstart"];
+    events.forEach((name) => window.addEventListener(name, bump));
+    bump();
+    return () => {
+      window.clearTimeout(timer);
+      events.forEach((name) => window.removeEventListener(name, bump));
+    };
+  }, []);
+
+  const ctx = useMemo(
+    () => ({ services, situations, openAssistant, kiosk: KIOSK }),
+    [services, situations, openAssistant],
+  );
+
   return (
-    <div className="page">
-      <header className="header">
-        <div className="container header-row">
-          <a className="logo" href="/">
-            ДаРэчы
-          </a>
-          <nav className="nav">
-            <a href="#situations">Жизненные ситуации</a>
-            <a href="#services">Услуги</a>
-            <button className="btn btn-ghost" type="button" title="Появится в неделе 2">
-              Рў
-            </button>
-            <button className="btn btn-primary" type="button" title="Ассистент появится в неделе 2">
-              Спросить ассистента
-            </button>
-          </nav>
-        </div>
-      </header>
-
-      <main>
-        <section className="hero">
-          <div className="container">
-            <h1>
-              Государство отвечает <span className="accent">за 5 минут</span>
-            </h1>
-            <p className="hero-sub">
-              Опишите ситуацию обычными словами — ДаРэчы подскажет, какие услуги вам нужны,
-              какие документы собрать и где каждый из них берётся. Каждый ответ — с цитатой
-              из официального нормативного акта.
-            </p>
-            <div className="hero-actions">
-              <button className="btn btn-primary btn-lg" type="button">
-                Описать свою ситуацию
-              </button>
-              <a className="btn btn-outline btn-lg" href="#situations">
-                Выбрать из списка
-              </a>
-            </div>
-          </div>
-        </section>
-
-        <section className="container section" id="situations">
-          <h2>Жизненные ситуации</h2>
-          <p className="section-sub">Выберите, что у вас произошло, — покажем весь маршрут.</p>
-          <div className="grid">
-            {LIFE_SITUATIONS.map((situation) => (
-              <div
-                key={situation.id}
-                className={`card situation ${situation.active ? "" : "card-disabled"}`}
-                title={situation.active ? undefined : "Ситуация появится в следующих неделях"}
-              >
-                <span className="situation-icon">{situation.icon}</span>
-                <span className="situation-title">{situation.title}</span>
-                <span className="situation-hint">{situation.hint}</span>
-                {situation.active && <span className="badge">MVP</span>}
+    <AppCtx.Provider value={ctx}>
+      <a className="skip" href="#main" onClick={(e) => { e.preventDefault(); document.getElementById("main")?.focus(); }}>
+        {t("skip")}
+      </a>
+      <div className="page-shell">
+        <header className="hdr">
+          <div className="wrap hdr-row">
+            <a className="brand" href="#/" aria-label="ДаРэчы">
+              <svg className="brand-mark" viewBox="0 0 16 16" width="26" height="26" aria-hidden="true">
+                <path d="M8 1l7 7-7 7-7-7z" fill="currentColor" />
+                <path d="M8 5l3 3-3 3-3-3z" fill="var(--paper)" />
+              </svg>
+              <span className="brand-name">ДаРэчы</span>
+              <span className="brand-tag">{t("brand_tag")}</span>
+            </a>
+            <nav className="nav" aria-label="main">
+              <a href="#/situations">{t("nav_situations")}</a>
+              <a href="#/services">{t("nav_services")}</a>
+              <div className="lang" role="group" aria-label="language">
+                {(["ru", "be"] as Lang[]).map((code) => (
+                  <button key={code} type="button" aria-pressed={lang === code} onClick={() => setLang(code)}>
+                    {code === "ru" ? "RU" : "БЕЛ"}
+                  </button>
+                ))}
               </div>
-            ))}
+              <button className="btn btn-primary" type="button" onClick={() => openAssistant()}>
+                {t("nav_ask")}
+              </button>
+            </nav>
           </div>
-        </section>
+          <div className="orn" aria-hidden="true" />
+        </header>
 
-        <section className="container section" id="services">
-          <h2>Услуги в MVP</h2>
-          <p className="section-sub">
-            Живые данные с бэкенда. На странице каждой услуги — простыми словами: кому, сколько,
-            в какой срок, чек-лист документов и ссылка на нормативный акт.
-          </p>
-          {api.kind === "loading" && <p className="muted">Загружаем услуги…</p>}
-          {api.kind === "error" && (
-            <div className="api-error">
-              Бэкенд не отвечает ({api.message}). Подними его: <code>cd backend && uvicorn app.main:app --reload</code> —
-              инструкция в README.
-            </div>
+        <main id="main" tabIndex={-1}>
+          {route.name === "home" && <Home />}
+          {route.name === "situation" && <SituationPage id={route.id} />}
+          {route.name === "service" && <ServicePage id={route.id} />}
+          {route.name === "notfound" && (
+            <section className="wrap section">
+              <h1 className="page-title">{t("notfound")}</h1>
+              <p className="muted">{t("notfound_d")}</p>
+              <a className="btn btn-outline" href="#/">
+                {t("home")}
+              </a>
+            </section>
           )}
-          {api.kind === "ok" && (
-            <div className="service-list">
-              {api.services.map((service) => (
-                <details key={service.id} className="card service">
-                  <summary>
-                    <strong>{service.title}</strong>
-                    <span className="muted"> — {service.summary}</span>
-                  </summary>
-                  <dl className="service-facts">
-                    <div>
-                      <dt>Кому</dt>
-                      <dd>{service.who}</dd>
-                    </div>
-                    <div>
-                      <dt>Размер</dt>
-                      <dd>{service.amount}</dd>
-                    </div>
-                    <div>
-                      <dt>Срок</dt>
-                      <dd>{service.deadline}</dd>
-                    </div>
-                  </dl>
-                  <h3>Документы</h3>
-                  <ul className="checklist">
-                    {service.checklist.map((row, index) => (
-                      <li key={index}>
-                        {row.item} <span className="muted">— {row.where}</span>
-                      </li>
-                    ))}
-                  </ul>
-                  <h3>Источники</h3>
-                  <ul className="sources">
-                    {service.sources.map((source, index) => (
-                      <li key={index}>
-                        {source.url ? (
-                          <a href={source.url} target="_blank" rel="noreferrer">
-                            {source.title}
-                          </a>
-                        ) : (
-                          source.title
-                        )}
-                        {source.point && <span className="muted"> · {source.point}</span>}
-                      </li>
-                    ))}
-                  </ul>
-                </details>
-              ))}
-            </div>
-          )}
-        </section>
-      </main>
+        </main>
 
-      <footer className="footer">
-        <div className="container">
-          <p>
-            <strong>ДаРэчы</strong> · ИИ-проводник по госуслугам · «100 идей для Беларуси», сезон 2026/2027
-          </p>
-          <p className="muted">
-            Ассистент консультирует по официальным нормативным актам и не заменяет юридически
-            значимые решения государственных органов. Официальную консультацию даёт орган.
-          </p>
-        </div>
-      </footer>
-    </div>
+        <footer className="ftr">
+          <div className="orn" aria-hidden="true" />
+          <div className="wrap">
+            <p>
+              <strong>ДаРэчы</strong> · {t("foot_a")}
+            </p>
+            <p className="muted">{t("foot_b")}</p>
+          </div>
+        </footer>
+      </div>
+
+      <Assistant key={session} open={open} onClose={closeAssistant} request={request} />
+    </AppCtx.Provider>
+  );
+}
+
+export default function App() {
+  const [lang, setLangState] = useState<Lang>(storedLang);
+  const setLang = useCallback((next: Lang) => {
+    setLangState(next);
+    try {
+      localStorage.setItem("darechy:lang", next);
+    } catch {
+      // не критично
+    }
+  }, []);
+  const value = useMemo(() => ({ lang, setLang }), [lang, setLang]);
+  return (
+    <LangCtx.Provider value={value}>
+      <Shell />
+    </LangCtx.Provider>
   );
 }
