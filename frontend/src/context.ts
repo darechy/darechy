@@ -1,9 +1,9 @@
-import { createContext } from "react";
+import { createContext } from 'react';
 
-import type { Service, Situation } from "./api";
-import type { AsyncState } from "./hooks";
+import type { Service, Situation } from './api';
+import type { AsyncState } from './hooks';
 
-export type OpenAssistantOptions = { text?: string; serviceId?: string };
+export type OpenAssistantOptions = { text?: string; serviceId?: string; voice?: boolean };
 
 export type AppContext = {
   services: AsyncState<Service[]>;
@@ -13,8 +13,8 @@ export type AppContext = {
 };
 
 export const AppCtx = createContext<AppContext>({
-  services: { kind: "loading" },
-  situations: { kind: "loading" },
+  services: { kind: 'loading' },
+  situations: { kind: 'loading' },
   openAssistant: () => {},
   kiosk: false,
 });
