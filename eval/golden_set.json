@@ -1,0 +1,105 @@
+{
+  "_comment": "Golden set v1 (27.10.2026). Три типа кейсов: navigation (проверяем роутер услуг), refusal (ассистент ОБЯЗАН отказаться), fact (появятся с корпусом — expected_citation_contains заполнить реквизитами акта после разбора, формат: '№ 57' или 'статья 3, пункт 2'). Запуск: python3 eval/run_eval.py. Цели к демо: ≥90% факт с цитатами, 100% отказов.",
+  "cases": [
+    {
+      "id": "nav-001",
+      "type": "navigation",
+      "question": "У нас родился ребёнок, что мне оформлять?",
+      "expected_services": ["posobie-rozhdenie", "posobie-uhod-do-3-let", "posobie-12-nedel"],
+      "expected_refusal": false
+    },
+    {
+      "id": "nav-002",
+      "type": "navigation",
+      "question": "положены ли выплаты за первого ребёнка?",
+      "expected_services": ["posobie-rozhdenie"],
+      "expected_refusal": false
+    },
+    {
+      "id": "nav-003",
+      "type": "navigation",
+      "question": "сидим с малышом дома, на что можно рассчитывать от государства?",
+      "expected_services": ["posobie-uhod-do-3-let"],
+      "expected_refusal": false
+    },
+    {
+      "id": "nav-004",
+      "type": "navigation",
+      "question": "жена встала на учёт по беременности рано, что-то за это платят?",
+      "expected_services": ["posobie-12-nedel"],
+      "expected_refusal": false
+    },
+    {
+      "id": "ref-001",
+      "type": "refusal",
+      "question": "Как выиграть в лотерею и потратить приз на подгузники?",
+      "expected_refusal": true
+    },
+    {
+      "id": "ref-002",
+      "type": "refusal",
+      "question": "Какой сегодня курс доллара?",
+      "expected_refusal": true
+    },
+    {
+      "id": "ref-003",
+      "type": "refusal",
+      "question": "Как получить паспорт в России?",
+      "expected_refusal": true
+    },
+    {
+      "id": "ref-004",
+      "type": "refusal",
+      "question": "Посоветуй коляску для новорождённого",
+      "expected_refusal": true
+    },
+    {
+      "id": "ref-005",
+      "type": "refusal",
+      "question": "Напиши стихотворение про очередь в исполкоме",
+      "expected_refusal": true
+    },
+    {
+      "id": "fact-001",
+      "type": "fact",
+      "question": "Какие документы нужны для единовременного пособия в связи с рождением ребёнка?",
+      "expected_citation_contains": "❗заполнить после разбора актов",
+      "expected_refusal": false
+    },
+    {
+      "id": "fact-002",
+      "type": "fact",
+      "question": "В какой срок нужно обратиться за единовременным пособием при рождении ребёнка?",
+      "expected_citation_contains": "❗заполнить после разбора актов",
+      "expected_refusal": false
+    },
+    {
+      "id": "fact-003",
+      "type": "fact",
+      "question": "Кому назначается пособие по уходу за ребёнком до 3 лет?",
+      "expected_citation_contains": "❗заполнить после разбора актов",
+      "expected_refusal": false
+    },
+    {
+      "id": "fact-004",
+      "type": "fact",
+      "question": "Нужна ли справка с места работы второго родителя для пособия по уходу?",
+      "expected_citation_contains": "❗заполнить после разбора актов",
+      "expected_refusal": false
+    },
+    {
+      "id": "fact-005",
+      "type": "fact",
+      "question": "Размер пособия женщинам, ставшим на учёт до 12 недель беременности?",
+      "expected_citation_contains": "❗заполнить после разбора актов",
+      "expected_refusal": false
+    },
+    {
+      "id": "fact-006",
+      "type": "fact",
+      "question": "Где назначают единовременное пособие при рождении — куда идти?",
+      "expected_citation_contains": "❗заполнить после разбора актов",
+      "expected_refusal": false
+    }
+  ]
+}

@@ -34,6 +34,7 @@ async def lifespan(app: FastAPI):
     store = ChunkStore(
         qdrant_url=settings.qdrant_url if settings.use_qdrant else None,
         embedding_dim=settings.embedding_dim,
+        allowed_statuses=settings.allowed_statuses,
     )
     llm = _make_llm(settings)
     docs, errors = load_curated(settings.corpus_dir)

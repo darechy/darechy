@@ -27,9 +27,20 @@ class VoiceGateway:
     def __init__(self, settings: Settings) -> None:
         self.settings = settings
         self._stt = None
+        self._tts = None
 
     def available(self) -> bool:
         return shutil.which("ffmpeg") is not None
+
+    def tts_available(self) -> bool:
+        """TTS готов, если есть ffmpeg и пакет torch (модель грузится лениво)."""
+        if not self.available():
+            return False
+        try:
+            import torch  # noqa: F401
+        except ImportError:
+            return False
+        return True
 
     def _load_stt(self):
         if self._stt is None:
@@ -52,9 +63,15 @@ class VoiceGateway:
             segments, _info = model.transcribe(str(wav), language=language)
             return " ".join(segment.text.strip() for segment in segments).strip()
 
+    def synthesize_to_ogg(self, text: str, lang: str | None = None) -> bytes:
+        """Текст ответа → OGG/Opus. RuntimeError — окружение не готово,
+        ValueError — язык не поддержан. Вызывающий код деградирует в текст."""
+        from app.voice.tts import SileroTts, wav_to_ogg_opus
 
-def synthesize(text: str, language: str = "ru") -> Path:
-    """TTS → путь к ogg-файлу. Неделя 3; сейчас — NotImplementedError-заглушка
-    с ясным сообщением (бот в этом случае шлёт только текст)."""
-    msg = "TTS появится в неделе 3 (Silero v4): ответ идёт текстом"
-    raise NotImplementedError(msg)
+        if not self.tts_available():
+            msg = "TTS недоступен: нет ffmpeg или torch"
+            raise RuntimeError(msg)
+        if self._tts is None:
+            self._tts = SileroTts()
+        wav = self._tts.synthesize_wav(text, lang=lang or self.settings.tts_lang)
+        return wav_to_ogg_opus(wav)

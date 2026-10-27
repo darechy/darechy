@@ -12,12 +12,18 @@ import json
 import math
 import re
 import threading
+import uuid
 from collections import Counter
 
 import httpx
 
 from app.kb.models import Chunk, RetrievedChunk
 from app.llm.client import LlmClient
+
+_COLLECTION = "darechy"
+# Qdrant принимает только unsigned int или UUID как id точки — маппим chunk_id.
+_UUID_NS = uuid.UUID("6f1d2a3b-4c5d-4e6f-8a9b-0c1d2e3f4a5b")
+_EMBED_BATCH = 16
 
 _TOKEN_RE = re.compile(r"[\w]+", re.UNICODE)
 
@@ -75,19 +81,28 @@ class _Bm25Index:
 class ChunkStore:
     """Индекс чанков корпуса. Thread-safe на чтение/перестройку."""
 
-    def __init__(self, qdrant_url: str | None = None, embedding_dim: int = 1024) -> None:
+    def __init__(
+        self,
+        qdrant_url: str | None = None,
+        embedding_dim: int = 1024,
+        allowed_statuses: frozenset[str] | None = None,
+    ) -> None:
         self._lock = threading.Lock()
         self._chunks: list[Chunk] = []
         self._bm25: _Bm25Index | None = None
         self._qdrant_url = qdrant_url
         self._embedding_dim = embedding_dim
+        # По умолчанию индексируем только проверенное — правило конвейера.
+        # На dev/демо допускаем расширение через настройку, чтобы корпус,
+        # помеченный «разобран», можно было прогнать целиком.
+        self.allowed_statuses = allowed_statuses or frozenset({"проверен"})
         self.dense_available: bool = False
 
     # --- построение индекса -------------------------------------------------
 
     def rebuild(self, chunks: list[Chunk]) -> int:
         with self._lock:
-            self._chunks = [c for c in chunks if c.status == "проверен"]
+            self._chunks = [c for c in chunks if c.status in self.allowed_statuses]
             self._bm25 = _Bm25Index([tokenize(c.text) for c in self._chunks])
         return len(self._chunks)
 
@@ -117,12 +132,99 @@ class ChunkStore:
 
     # --- dense-плечо (Qdrant REST) -----------------------------------------
 
+    def _ensure_collection(self, embedding_dim: int) -> bool:
+        """Создаёт коллекцию под нужную размерность. False — Qdrant недоступен.
+
+        Если коллекция уже есть с другой размерностью — это не «мелкий шум»:
+        вектора молча не найдутся. Поэтому честно пересоздаём под актуальную
+        модель эмбеддингов.
+        """
+        if not self._qdrant_url:
+            return False
+        url = f"{self._qdrant_url}/collections/{_COLLECTION}"
+        try:
+            existing = httpx.get(url, timeout=5.0)
+            exists = existing.status_code == 200
+        except httpx.HTTPError:
+            return False
+
+        if exists:
+            try:
+                size = existing.json()["result"]["config"]["params"]["vectors"]["size"]
+            except (KeyError, TypeError, json.JSONDecodeError):
+                size = None
+            if size == embedding_dim:
+                return True
+            try:
+                httpx.delete(url, timeout=10.0).raise_for_status()
+            except httpx.HTTPError:
+                return False
+
+        try:
+            httpx.put(
+                url,
+                json={"vectors": {"size": embedding_dim, "distance": "Cosine"}},
+                timeout=15.0,
+            ).raise_for_status()
+        except httpx.HTTPError:
+            return False
+        return True
+
+    def dense_index(self, llm: LlmClient, batch_size: int = _EMBED_BATCH) -> int:
+        """Грузит текущие чанки в Qdrant. Возвращает число загруженных векторов.
+
+        0 — Qdrant или эмбеддинги недоступны; индексация — не тот шаг, который
+        имеет смысл «провалить»: BM25-плечо уже работает без неё.
+        """
+        if not self._qdrant_url:
+            return 0
+        with self._lock:
+            chunks = list(self._chunks)
+        if not chunks:
+            return 0
+
+        # Размерность узнаём у самой модели, а не из конфига: конфиг легко
+        # разъезжается с реально скачанным весом.
+        probe = llm.embed("проверка размерности")
+        if not probe:
+            return 0
+        if not self._ensure_collection(len(probe)):
+            return 0
+
+        uploaded = 0
+        for start in range(0, len(chunks), batch_size):
+            batch = chunks[start : start + batch_size]
+            vectors = llm.embed_batch([chunk.text for chunk in batch])
+            if not vectors:
+                break
+            points = [
+                {
+                    "id": str(uuid.uuid5(_UUID_NS, chunk.chunk_id)),
+                    "vector": vector,
+                    "payload": chunk.model_dump(mode="json"),
+                }
+                for chunk, vector in zip(batch, vectors, strict=True)
+            ]
+            try:
+                resp = httpx.put(
+                    f"{self._qdrant_url}/collections/{_COLLECTION}/points",
+                    json={"points": points},
+                    timeout=60.0,
+                )
+                resp.raise_for_status()
+            except httpx.HTTPError:
+                break
+            uploaded += len(points)
+
+        self.dense_available = uploaded > 0
+        return uploaded
+
     def _qdrant_search(self, vector: list[float], top_k: int) -> list[RetrievedChunk]:
         if not self._qdrant_url:
             return []
         try:
             resp = httpx.post(
-                f"{self._qdrant_url}/collections/darechy/points/search",
+                f"{self._qdrant_url}/collections/{_COLLECTION}/points/search",
                 json={"vector": vector, "limit": top_k, "with_payload": True},
                 timeout=5.0,
             )

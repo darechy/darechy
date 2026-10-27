@@ -3,7 +3,7 @@
 import tempfile
 from pathlib import Path
 
-from fastapi import APIRouter, Depends, HTTPException, Request, UploadFile
+from fastapi import APIRouter, Depends, HTTPException, Request, Response, UploadFile
 
 from app.models.schemas import ChatRequest, ChatResponse, Situation
 from app.services.catalog import Catalog
@@ -81,3 +81,31 @@ async def transcribe(
     finally:
         tmp.unlink(missing_ok=True)
     return {"text": text}
+
+
+@api_router.post("/voice/synthesize")
+def synthesize(
+    body: dict,
+    voice: VoiceGateway = Depends(get_voice),
+) -> Response:
+    """Текст → OGG/Opus (озвучка ответа на портале/киоске).
+
+    Тело: {"text": "...", "lang": "ru"}. Если TTS-окружение не готово — 503:
+    фронт в этом случае просто показывает текст.
+    """
+    text = (body or {}).get("text", "").strip()
+    if not text:
+        raise HTTPException(status_code=422, detail="Пустой text")
+    if len(text) > 2000:
+        text = text[:2000]  # ответ длиннее ~1,5 минут речи не озвучиваем
+    lang = (body or {}).get("lang") or "ru"
+    if not voice.tts_available():
+        raise HTTPException(
+            status_code=503,
+            detail="TTS недоступен: не установлен torch или ffmpeg",
+        )
+    try:
+        audio = voice.synthesize_to_ogg(text, lang=lang)
+    except (RuntimeError, ValueError) as exc:
+        raise HTTPException(status_code=503, detail=str(exc)) from exc
+    return Response(content=audio, media_type="audio/ogg")

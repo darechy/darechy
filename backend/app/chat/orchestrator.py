@@ -12,10 +12,11 @@ import re
 import time
 
 from app.chat.router import ServiceRouter
+from app.chat.sessions import SessionMemory
 from app.core.config import Settings
 from app.llm.client import LlmClient
 from app.models.schemas import ChatRequest, ChatResponse, Citation
-from app.retrieval.store import ChunkStore
+from app.retrieval.store import ChunkStore, tokenize
 
 REFUSAL_TEMPLATE = (
     "Честный ответ: в базе знаний «ДаРэчы» по этому вопросу подтверждённой "
@@ -26,6 +27,12 @@ REFUSAL_TEMPLATE = (
 
 _MARK_RE = re.compile(r"\[(?P<ids>[a-zA-Z0-9_\-,\s]+)\]")
 _MAX_QUOTE_CHARS = 600
+# Бюджет фрагмента, который уходит модели. 1800 символов ≈ 600 токенов на статью:
+# шесть статей ≈ 3 600 токенов вместо ~9 400 — это и есть лечение галлюцинаций.
+_MAX_EXCERPT_CHARS = 1800
+_MIN_EXCERPT_CHARS = 400
+# Режем по границе предложения, не ломая «п. 2.1.» и «ст. 11».
+_SENTENCE_RE = re.compile(r"(?<=[.;])\s+(?=[А-ЯA-Z0-9(])")
 
 SYSTEM_PROMPT = (
     "Ты — «ДаРэчы», ассистент по государственным услугам Беларуси. Ты отвечаешь "
@@ -69,6 +76,69 @@ def _extract_markers(answer: str) -> list[str]:
     return ids
 
 
+def _strip_refusal(answer: str) -> str:
+    """Убирает слово ОТКАЗ и возвращает содержательную часть ответа.
+
+    Пустая строка означает «модель действительно отказалась» — вызывающий код
+    превращает это в отказ-шаблон. Непустая — модель ответила, но зачем-то
+    дописала маркер: оставляем текст, маркер убираем.
+    """
+    content = answer.replace("ОТКАЗ", " ")
+    content = _MARK_RE.sub("", content)
+    content = re.sub(r"\s+", " ", content).strip(" \t\n-—:,;.")
+    return content
+
+
+def best_excerpt(
+    text: str,
+    query: str,
+    max_chars: int = _MAX_EXCERPT_CHARS,
+    min_chars: int = _MIN_EXCERPT_CHARS,
+) -> str:
+    """Выборка релевантных предложений из статьи — вместо всей статьи целиком.
+
+    Полная статья в промпте топит слабую модель и провоцирует выдуманные нормы.
+    Режем по предложениям, оцениваем пересечение с запросом (те же токены и
+    стоп-слова, что в BM25), берём лучшие. Если пересечений нет — возвращаем
+    начало статьи: цитировать всё равно нечего, но контекст нужен.
+    """
+    text = text.strip()
+    if len(text) <= max_chars:
+        return text
+
+    sentences = [s.strip() for s in _SENTENCE_RE.split(text) if s.strip()]
+    query_tokens = set(tokenize(query))
+    if not sentences or not query_tokens:
+        return text[:max_chars]
+
+    scored: list[tuple[float, int]] = []
+    for index, sentence in enumerate(sentences):
+        tokens = set(tokenize(sentence))
+        if not tokens:
+            scored.append((0.0, index))
+            continue
+        # Нормируем на длину: иначе длинные пункты выигрывают у точных коротких.
+        overlap = len(tokens & query_tokens) / (len(tokens) ** 0.5)
+        scored.append((overlap, index))
+
+    # Идём по убыванию релевантности, добавляем предложения, пока влезаем.
+    picked: list[int] = []
+    used = 0
+    for _, index in sorted(scored, key=lambda item: item[0], reverse=True):
+        length = len(sentences[index]) + 1
+        if used + length > max_chars and used >= min_chars:
+            break
+        picked.append(index)
+        used += length
+        if used >= max_chars:
+            break
+
+    if not picked:
+        return text[:max_chars]
+    # Возвращаем в исходном порядке — так текст статьи читается связно.
+    return " ".join(sentences[index] for index in sorted(picked))
+
+
 def _strip_markers(answer: str) -> str:
     cleaned = _MARK_RE.sub("", answer)
     cleaned = re.sub(r"\s+([.,;:!?])", r"\1", cleaned)  # «величиной .» → «величиной.»
@@ -82,42 +152,71 @@ class Orchestrator:
         store: ChunkStore,
         llm: LlmClient,
         router: ServiceRouter | None = None,
+        sessions: SessionMemory | None = None,
     ) -> None:
         self.settings = settings
         self.store = store
         self.llm = llm
         self.router = router
+        self.sessions = sessions if sessions is not None else SessionMemory()
 
     def answer(self, request: ChatRequest) -> ChatResponse:
         started = time.perf_counter()
+        history = self.sessions.history(request.session_id)
+
+        # Уточняющие вопросы («а какие документы?») теряют смысл без контекста:
+        # в поисковый запрос подмешиваем предыдущую реплику пользователя.
+        query = request.message
+        if history:
+            last_user = next(
+                (turn["content"] for turn in reversed(history) if turn["role"] == "user"),
+                "",
+            )
+            if last_user and request.message.lower().startswith(
+                ("а ", "и ", "а какие", "а что", "а где", "а когда", "а сколько")
+            ):
+                query = f"{last_user} {request.message}"
 
         # Guardrail №1: нет релевантных чанков → отказ. Порог применяется
         # к сырым скорам плеч внутри store.search (RRF-скор — ранговый).
         hits = self.store.search(
-            request.message,
+            query,
             self.llm,
             top_k=request.top_k,
             score_threshold=self.settings.retrieval_score_threshold,
         )
         suggested = self.router.route(request.message) if self.router else []
         if not hits:
+            self._remember(request, None)
             return self._done(REFUSAL_TEMPLATE, [], refusal=True,
                               suggested=suggested, started=started)
 
-        llm_answer = self.llm.chat(SYSTEM_PROMPT, self._build_context(request, hits))
+        llm_answer = self.llm.chat(
+            SYSTEM_PROMPT, self._build_context(request, hits, history)
+        )
 
         if llm_answer is None:
             # Guardrail №2: LLM недоступна — экстрактивный режим, не выдумываем.
+            answer, citations = self._extractive_answer(hits)
+            self._remember(request, answer)
             return self._done(
-                *self._extractive_answer(hits),
+                answer, citations,
                 suggested=suggested,
                 started=started,
             )
 
-        if "ОТКАЗ" in llm_answer and len(llm_answer) < 400:
-            # Модель честно сказала «ответа в актах нет» — превращаем в отказ.
-            return self._done(REFUSAL_TEMPLATE, [], refusal=True,
-                              suggested=suggested, started=started)
+        if "ОТКАЗ" in llm_answer:
+            # Модель умеет дописать ОТКАЗ в конец нормального ответа, забыв, что
+            # её просили вывести ровно это слово. Раньше маркер просачивался
+            # в ответ пользователю («... ОТКАЗ» после верного абзаца).
+            # Смотрим на содержательную часть: пусто — честный отказ,
+            # есть текст — это ответ, маркер просто выкидываем.
+            content = _strip_refusal(llm_answer)
+            if not content:
+                self._remember(request, None)
+                return self._done(REFUSAL_TEMPLATE, [], refusal=True,
+                                  suggested=suggested, started=started)
+            llm_answer = content
 
         marker_ids = [i for i in _extract_markers(llm_answer) if self.store.get(i)]
         if marker_ids:
@@ -125,20 +224,47 @@ class Orchestrator:
         else:
             # Модель не промаркировала — цитируем лучший чанк вместо «веры на слово».
             citations = _citations_from([hits[0].chunk.chunk_id], self.store)
+        answer = _strip_markers(llm_answer)
+        self._remember(request, answer)
         return self._done(
-            _strip_markers(llm_answer), citations, refusal=False,
+            answer, citations, refusal=False,
             suggested=suggested, started=started,
         )
 
     # --- внутреннее ---------------------------------------------------------
 
-    def _build_context(self, request: ChatRequest, hits) -> str:
+    def _remember(self, request: ChatRequest, assistant_answer: str | None) -> None:
+        """Запоминает реплику пользователя и (если был) ответ ассистента."""
+        self.sessions.append(request.session_id, "user", request.message)
+        if assistant_answer:
+            self.sessions.append(request.session_id, "assistant", assistant_answer)
+
+    def _build_context(self, request: ChatRequest, hits, history=None) -> str:
+        """Контекст для LLM — только релевантные фрагменты, а не статьи целиком.
+
+        Замер на реальном корпусе: шесть статей закона — это ~28 000 символов
+        (~9 400 токенов) сплошного юридического текста. Модель на 1.7b в таком
+        объёме тонет и начинает выдумывать статьи (проверено: сочинила «ст. 19
+        о временной нетрудоспособности» в ответ про пособие при рождении).
+        Поэтому в промпт уходит выборка релевантных предложений, а цитата
+        остаётся полной статьёй — принцип «в ответе дословный пункт акта»
+        не нарушается, урезается только объём промпта.
+        """
         blocks: list[str] = []
+        if history:
+            dialogue = "\n".join(
+                f"{'Пользователь' if turn['role'] == 'user' else 'Ассистент'}: {turn['content']}"
+                for turn in history
+            )
+            blocks.append(
+                "Предыдущий диалог (учитывай его при ответе на уточнения):\n" + dialogue
+            )
         for hit in hits:
             chunk = hit.chunk
+            excerpt = best_excerpt(chunk.text, request.message)
             blocks.append(
                 f"[{chunk.chunk_id}] {chunk.doc_title}"
-                f" ({chunk.doc_number}, {chunk.doc_date})\n{chunk.text}"
+                f" ({chunk.doc_number}, {chunk.doc_date})\n{excerpt}"
             )
         context = "\n\n".join(blocks)
         if request.service_id:
