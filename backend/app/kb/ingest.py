@@ -39,7 +39,11 @@ def collect_chunks(docs: list[CuratedDoc]) -> list[Chunk]:
     return chunks
 
 
-def ingest(settings: Settings) -> int:
+def ingest(settings: Settings, llm=None) -> tuple[int, int]:
+    """BM25-индекс + (если доступны Qdrant и эмбеддинги) dense-плечо.
+
+    Возвращает (чанков в BM25-индексе, векторов загружено в Qdrant).
+    """
     docs, errors = load_curated(settings.corpus_dir)
     for error in errors:
         logger.warning("Кривой файл корпуса: %s", error)
@@ -47,16 +51,29 @@ def ingest(settings: Settings) -> int:
     store = ChunkStore(
         qdrant_url=settings.qdrant_url if settings.use_qdrant else None,
         embedding_dim=settings.embedding_dim,
+        allowed_statuses=settings.allowed_statuses,
     )
     indexed = store.rebuild(chunks)
+
+    if llm is None:
+        from app.llm.client import LlmClient
+
+        llm = LlmClient(settings)
+    uploaded = store.dense_index(llm)
+    if not uploaded:
+        logger.info(
+            "Dense-плечо не загружено (нет Qdrant или нет модели эмбеддингов %s) — "
+            "поиск работает на BM25",
+            settings.embedding_model,
+        )
     logger.info("Проиндексировано %d чанков из %d актов", indexed, len(docs))
-    return indexed
+    return indexed, uploaded
 
 
 def main() -> None:
     logging.basicConfig(level=logging.INFO, format="%(levelname)s %(message)s")
-    indexed = ingest(get_settings())
-    print(f"OK: {indexed} чанков в индексе")
+    indexed, uploaded = ingest(get_settings())
+    print(f"OK: {indexed} чанков в BM25-индексе, {uploaded} векторов в Qdrant")
     sys.exit(0)
 
 

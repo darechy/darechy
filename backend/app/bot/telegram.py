@@ -5,6 +5,7 @@
 Ответ голосом (Silero) — неделя 3, сейчас текстом.
 """
 
+import logging
 import tempfile
 from pathlib import Path
 
@@ -12,6 +13,8 @@ from app.chat.orchestrator import Orchestrator
 from app.core.config import Settings
 from app.models.schemas import ChatRequest
 from app.voice.gateway import VoiceGateway
+
+logger = logging.getLogger(__name__)
 
 
 def _format_answer(answer: str, citations) -> str:
@@ -60,6 +63,16 @@ def build_bot(settings: Settings, orchestrator: Orchestrator, voice: VoiceGatewa
     async def _answer_and_reply(message: Message, question: str) -> None:
         response = orchestrator.answer(ChatRequest(message=question))
         await message.answer(_format_answer(response.answer, response.citations))
+        # Голосовой дубль ответа (Silero). Любая неудача — молча остаёмся
+        # на тексте: бот не должен ломаться из-за озвучки.
+        try:
+            audio = voice.synthesize_to_ogg(response.answer)
+            if audio:
+                import io
+
+                await message.answer_voice(io.BytesIO(audio))
+        except Exception:  # noqa: BLE001 — озвучка не критична
+            logger.debug("TTS недоступен, отвечаем только текстом", exc_info=True)
 
     @dp.message(F.text)
     async def on_text(message: Message) -> None:

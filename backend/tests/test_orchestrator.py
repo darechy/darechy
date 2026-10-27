@@ -51,6 +51,31 @@ def test_llm_refusal_keyword_maps_to_refusal(env) -> None:
     assert response.refusal
 
 
+def test_trailing_refusal_marker_is_stripped_not_shown(env) -> None:
+    """Модель 1.7b дописывает ОТКАЗ после верного абзаца — маркер не должен
+    попадать пользователю, а ответ обязан остаться."""
+    settings, store = env
+    llm = FakeLlm(
+        chat_script=["Пособие назначается с даты обращения [a_p1].\n\nОТКАЗ"]
+    )
+    orch = Orchestrator(settings, store, llm)
+    response = orch.answer(ChatRequest(message="когда назначается пособие?"))
+    assert not response.refusal
+    assert "ОТКАЗ" not in response.answer
+    assert "Пособие назначается с даты обращения" in response.answer
+
+
+def test_refusal_marker_alone_still_refuses(env) -> None:
+    """Если кроме маркера ничего нет — это настоящий отказ, а не ответ."""
+    settings, store = env
+    llm = FakeLlm(chat_script=["ОТКАЗ."])
+    orch = Orchestrator(settings, store, llm)
+    response = orch.answer(ChatRequest(message="какой размер пособия?"))
+    assert response.refusal
+    assert response.answer == REFUSAL_TEMPLATE
+    assert response.citations == []
+
+
 def test_extractive_fallback_when_llm_down(env) -> None:
     """LLM недоступна → дословная цитата лучшего чанка, отказ-лжи быть не должно."""
     settings, store = env

@@ -65,7 +65,7 @@ darechy/
 | Docker Desktop | Postgres, Redis, Qdrant | `brew install --cask docker` |
 | Python ≥ 3.11 | бэкенд | уже есть на macOS |
 | Node ≥ 20 | фронтенд | уже есть / `brew install node` |
-| Ollama (неделя 2) | локальная LLM | `brew install ollama && ollama pull qwen3:8b` |
+| Ollama | локальная LLM | `brew install ollama && ollama pull bge-m3 && ollama pull qwen3:1.7b` — почему именно эти, см. [локальная-модель.md](docs/локальная-модель.md) |
 
 ### 1. Инфраструктура
 
@@ -96,15 +96,21 @@ uvicorn app.main:app --reload
 - http://localhost:8000/docs — автодокументация API (Swagger)
 - http://localhost:8000/api/services — каталог услуг (пока стаб)
 
-Тесты: `pytest -q` (23 шт.: парсер актов, BM25/RRF, оркестратор с цитатами, API) · Линтер: `ruff check app tests`
+Тесты: `pytest -q` (парсер актов, BM25/RRF, оркестратор с цитатами, память диалога, TTS, API) · Линтер: `ruff check app tests`
+
+Голосовой синтез (TTS, опционально): `pip install -r requirements-voice.txt` — без него бот и портал отвечают только текстом, всё остальное работает. Модель Silero (~100 МБ) скачается при первом синтезе.
+
+Регресс качества (API должен работать): `python3 eval/run_eval.py` из корня репо — прогон golden set, отчёт в `eval/history/`.
 
 Индексация корпуса (после того как появились `kb_corpus/curated/*.json`):
 
 ```bash
-python -m app.kb.ingest    # чанки → индекс; Qdrant поднят → dense-плечо включится само
+python -m app.kb.ingest    # чанки → BM25; Qdrant поднят и модель есть → грузятся вектора
 ```
 
 Без Docker/Qdrant/Ollama всё работает: BM25 + экстрактивные ответы с цитатами (guardrail живой и в деградации).
+
+**Локальная модель:** какие модели качать, почему 1.7b, как настроить `keep_alive` под 8 ГБ RAM — [локальная-модель.md](docs/локальная-модель.md).
 
 ### 3. Фронтенд
 
