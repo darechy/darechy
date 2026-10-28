@@ -12,6 +12,7 @@ import "./kiosk-list.css";
 import "./kiosk-chat.css";
 import "./kiosk-fix.css";
 import "./kiosk-bar.css";
+import "./mobile.css";
 
 createRoot(document.getElementById("root")!).render(
   <StrictMode>

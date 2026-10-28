@@ -1,0 +1,237 @@
+/* Мобильная адаптация основного режима (киоск не затрагивается). Подключается последним.
+   Точки останавливания: 900 px (планшет), 640 px (телефон), 380 px (маленький телефон). */
+
+body {
+  overflow-x: clip;
+}
+
+/* Сетки никогда не шире экрана, даже на 320 px. */
+.tiles,
+.svc-list {
+  grid-template-columns: repeat(auto-fill, minmax(min(100%, 300px), 1fr));
+}
+
+@media (max-width: 900px) {
+  .hero {
+    padding: 32px 0 28px;
+  }
+
+  .hero h1 {
+    font-size: clamp(32px, 9vw, 48px);
+  }
+
+  .hero-sub {
+    font-size: 17px;
+  }
+
+  .section {
+    padding-top: 28px;
+    padding-bottom: 32px;
+  }
+
+  .search {
+    flex-wrap: wrap;
+  }
+
+  .search input {
+    flex: 1 1 100%;
+    max-width: none;
+  }
+
+  .slider-ctl {
+    margin-left: 0;
+  }
+
+  .page .page-head,
+  .page .facts,
+  .page .page-body,
+  .page .route {
+    max-width: none;
+  }
+}
+
+@media (max-width: 640px) {
+  /* Шапка: логотип и переключатель языка в одну строку. */
+  .hdr-row {
+    height: 60px;
+    gap: 10px;
+  }
+
+  .brand .brand-logo {
+    height: 38px;
+  }
+
+  .nav .lang {
+    height: 40px;
+  }
+
+  .nav .lang button {
+    padding: 0 13px;
+    font-size: 14px;
+  }
+
+  /* «Спросить ассистента» – закрепленная полоса внизу экрана, под большим пальцем. */
+  .nav .nav-ask {
+    position: fixed;
+    left: 16px;
+    right: 16px;
+    bottom: max(14px, env(safe-area-inset-bottom));
+    z-index: 25;
+    width: auto;
+    min-width: 0;
+    height: 54px;
+    font-size: 17px;
+    box-shadow: 0 14px 34px rgba(90, 75, 242, 0.38);
+  }
+
+  body {
+    padding-bottom: 88px;
+  }
+
+  /* Поле вопроса: кнопка под полем на всю ширину. */
+  .askbox-row {
+    flex-direction: column;
+  }
+
+  .askbox-row input {
+    padding: 14px 16px;
+  }
+
+  .askbox-row .btn {
+    width: 100%;
+    padding: 14px 20px;
+  }
+
+  .principles {
+    padding: 20px;
+  }
+
+  .tile {
+    min-height: 92px;
+    padding: 14px;
+  }
+
+  /* Внутренние страницы. */
+  .backbar-row {
+    gap: 10px;
+    min-height: 54px;
+  }
+
+  .backbar-link {
+    flex: none;
+  }
+
+  .backbar-trail {
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .page-actions .btn {
+    flex: 1 1 100%;
+  }
+
+  .page-title {
+    font-size: clamp(28px, 8vw, 36px);
+  }
+
+  .lead {
+    font-size: 17px;
+  }
+
+  .checklist label {
+    padding: 12px;
+    gap: 12px;
+  }
+
+  .sources li {
+    padding: 12px;
+    gap: 10px;
+  }
+
+  /* Маршрут компактнее. */
+  .route li {
+    grid-template-columns: 36px 1fr;
+    gap: 12px;
+  }
+
+  .route li:not(:last-child)::before {
+    left: 15px;
+    top: 36px;
+  }
+
+  .route-n {
+    width: 32px;
+    height: 32px;
+    font-size: 14px;
+  }
+
+  .route-card {
+    padding: 16px;
+  }
+
+  .route-ask {
+    padding: 16px;
+  }
+
+  /* Ассистент на весь экран. */
+  .asst {
+    width: 100vw;
+    border-left: 0;
+  }
+
+  .asst-head {
+    padding: 14px;
+  }
+
+  .asst-body {
+    padding: 14px;
+  }
+
+  .msg {
+    max-width: 96%;
+  }
+
+  .asst-form {
+    padding: 10px 12px max(10px, env(safe-area-inset-bottom));
+  }
+
+  .ftr {
+    padding: 24px 0 28px;
+    margin-top: 24px;
+  }
+}
+
+@media (max-width: 380px) {
+  .nav .lang button {
+    padding: 0 10px;
+  }
+
+  .brand .brand-logo {
+    height: 34px;
+  }
+
+  .hero h1 {
+    font-size: 30px;
+  }
+}
+
+/* На сенсорных экранах нет hover: карточки не «залипают» в приподнятом состоянии после касания. */
+@media (hover: none) {
+  a.tile:hover,
+  .svc:hover,
+  .sources li:hover,
+  .chip:hover,
+  .btn-primary:hover:not(:disabled),
+  .mic:hover,
+  .slider-btn:hover:not(:disabled) {
+    transform: none;
+  }
+
+  a.tile:hover,
+  .svc:hover,
+  .sources li:hover {
+    box-shadow: none;
+  }
+}
