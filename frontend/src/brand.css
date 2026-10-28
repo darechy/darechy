@@ -13,22 +13,56 @@
   --ok: #1c4a3a;
   --warn-bg: #f4efe4;
   --warn: #6d5428;
-  --rule: #233883;
+  --band-top: #ffffff;
+  --band-hero: #e9eefb;
+  --band-foot: #e2e8f6;
 }
 
+/* Шапка, основа и подвал отделены цветом фона, без линий. */
 .hdr,
 .k-bar {
-  border-bottom: 3px solid var(--rule);
-}
-
-.ftr {
-  border-top: 3px solid var(--rule);
+  background: var(--band-top);
+  border-bottom: 0;
+  box-shadow: 0 1px 0 rgba(35, 56, 131, 0.05);
 }
 
 .hdr::after,
 .k-bar::after,
 .ftr::before {
   display: none;
+}
+
+.hero {
+  background: var(--band-hero);
+  border-bottom: 0;
+}
+
+.ftr {
+  background: var(--band-foot);
+  border-top: 0;
+  margin-top: 48px;
+  padding: 32px 0 40px;
+}
+
+/* Карточки услуг: значения столбиком, без отступа dd. */
+.svc dl {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 10px;
+}
+
+.svc dd {
+  margin: 2px 0 0;
+  font-family: var(--sans);
+  font-size: 14px;
+  font-weight: 500;
+  line-height: 1.45;
+  color: var(--ink);
+  overflow-wrap: anywhere;
+}
+
+.svc dt {
+  font-size: 11px;
 }
 
 .btn-primary,

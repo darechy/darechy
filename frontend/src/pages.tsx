@@ -7,6 +7,9 @@ import type { AsyncState } from './hooks';
 import { EXAMPLES, SITUATIONS, useT } from './i18n';
 import { Icon, situationIcon } from './icons';
 
+// В данных бэкенда бывают заглушки с «❗» — убираем знак, текст оставляем.
+const clean = (s: string): string => s.replace(/^[\s\u2757\u203C\u26A0\uFE0F]+/, '');
+
 export function Status({ state }: { state: AsyncState<unknown> }) {
   const { t } = useT();
   if (state.kind === 'loading') return <p className='status'>{t('loading')}</p>;
@@ -166,11 +169,11 @@ export function Home() {
                     <dl>
                       <div>
                         <dt>{t('amount')}</dt>
-                        <dd>{service.amount}</dd>
+                        <dd>{clean(service.amount)}</dd>
                       </div>
                       <div>
                         <dt>{t('deadline')}</dt>
-                        <dd>{service.deadline}</dd>
+                        <dd>{clean(service.deadline)}</dd>
                       </div>
                     </dl>
                   </a>
@@ -179,20 +182,6 @@ export function Home() {
             )}
           </>
         )}
-      </section>
-
-      <section className='wrap section'>
-        <div className='sec-head'>
-          <h2>{t('ch_title')}</h2>
-        </div>
-        <div className='channels'>
-          {['portal', 'bot', 'kiosk'].map((key) => (
-            <div className='channel' key={key}>
-              <h3>{t(`ch_${key}`)}</h3>
-              <p>{t(`ch_${key}_d`)}</p>
-            </div>
-          ))}
-        </div>
       </section>
     </>
   );
@@ -272,15 +261,15 @@ function ServiceView({ service }: { service: Service }) {
       <dl className='facts'>
         <div>
           <dt>{t('who')}</dt>
-          <dd>{service.who}</dd>
+          <dd>{clean(service.who)}</dd>
         </div>
         <div>
           <dt>{t('amount')}</dt>
-          <dd>{service.amount}</dd>
+          <dd>{clean(service.amount)}</dd>
         </div>
         <div>
           <dt>{t('deadline')}</dt>
-          <dd>{service.deadline}</dd>
+          <dd>{clean(service.deadline)}</dd>
         </div>
       </dl>
 
@@ -304,8 +293,8 @@ function ServiceView({ service }: { service: Service }) {
                     <input type='checkbox' checked={checked} onChange={() => toggle(index)} />
                     <span className='box' aria-hidden='true' />
                     <span>
-                      <strong>{row.item}</strong>
-                      <small>{row.where}</small>
+                      <strong>{clean(row.item)}</strong>
+                      <small>{clean(row.where)}</small>
                     </span>
                   </label>
                 </li>
@@ -401,10 +390,10 @@ export function SituationPage({ id }: { id: string }) {
               <p>{service.summary}</p>
               <p className='route-meta'>
                 <span>
-                  {t('amount')}: {service.amount}
+                  {t('amount')}: {clean(service.amount)}
                 </span>
                 <span>
-                  {t('deadline')}: {service.deadline}
+                  {t('deadline')}: {clean(service.deadline)}
                 </span>
               </p>
               <a href={`#/service/${encodeURIComponent(service.id)}`}>{t('open_service')} →</a>
