@@ -15,8 +15,26 @@ import { useU } from './ui';
 
 const IDLE_MS = 90_000;
 const WARN_MS = 30_000;
-const KIOSK = new URLSearchParams(window.location.search).get('kiosk') === '1';
+const PARAMS = new URLSearchParams(window.location.search);
+const KIOSK = PARAMS.get('kiosk') === '1';
+// Тест слайдера: открыть сайт с ?stub=1 – к каталогу подмешивается четвёртая услуга. Без параметра её нет.
+const STUB_ON = PARAMS.get('stub') === '1';
 const LANG_FADE_MS = 220;
+
+const STUB_SERVICE: Service = {
+  id: 'stub-demo',
+  title: 'Тестовая услуга (заглушка)',
+  situation: 'demo',
+  summary: 'Демо-карточка для проверки слайдера на главной. В каталоге бэкенда её нет, появляется только при ?stub=1.',
+  who: 'Только для проверки интерфейса.',
+  amount: 'Без выплаты',
+  deadline: 'Не применяется',
+  checklist: [
+    { item: 'Первый документ для проверки галочки', where: 'у вас' },
+    { item: 'Второй документ', where: 'исполком' },
+  ],
+  sources: [{ title: 'Тестовый источник для проверки верстки', url: 'https://pravo.by', point: 'пункт 1 демо-акта' }],
+};
 
 // Убираем ведущие «❗» из данных бэкенда: эмодзи в интерфейсе не используем.
 const strip = (s: string): string => s.replace(/^[\s\u2757\u203C\u26A0\uFE0F]+/, '');
@@ -51,13 +69,11 @@ function Shell() {
   const [session, setSession] = useState(0);
   const [warn, setWarn] = useState(false);
 
-  const services = useMemo<AsyncState<Service[]>>(
-    () =>
-      rawServices.kind === 'ok'
-        ? { kind: 'ok', data: rawServices.data.map((s) => cleanService(localizeService(s, lang))) }
-        : rawServices,
-    [rawServices, lang],
-  );
+  const services = useMemo<AsyncState<Service[]>>(() => {
+    if (rawServices.kind !== 'ok') return rawServices;
+    const base = STUB_ON ? [...rawServices.data, STUB_SERVICE] : rawServices.data;
+    return { kind: 'ok', data: base.map((s) => cleanService(localizeService(s, lang))) };
+  }, [rawServices, lang]);
 
   const openAssistant = useCallback((options?: OpenAssistantOptions) => {
     setRequest((prev) => ({
