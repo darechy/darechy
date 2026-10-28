@@ -15,6 +15,7 @@ import { useU } from './ui';
 const IDLE_MS = 90_000;
 const WARN_MS = 30_000;
 const KIOSK = new URLSearchParams(window.location.search).get('kiosk') === '1';
+const LANG_FADE_MS = 220;
 
 function storedLang(): Lang {
   try {
@@ -158,10 +159,26 @@ function Shell() {
 
 export default function App() {
   const [lang, setLangState] = useState<Lang>(storedLang);
-  const setLang = useCallback((next: Lang) => {
-    setLangState(next);
-    try { localStorage.setItem('darechy:lang', next); } catch { /* ignore */ }
-  }, []);
+
+  // Сначала плавно гасим текст, потом меняем язык и плавно возвращаем.
+  const setLang = useCallback(
+    (next: Lang) => {
+      if (next === lang) return;
+      const root = document.documentElement;
+      root.classList.add('lang-out');
+      window.setTimeout(() => {
+        setLangState(next);
+        try {
+          localStorage.setItem('darechy:lang', next);
+        } catch {
+          /* ignore */
+        }
+        window.requestAnimationFrame(() => window.requestAnimationFrame(() => root.classList.remove('lang-out')));
+      }, LANG_FADE_MS);
+    },
+    [lang],
+  );
+
   const value = useMemo(() => ({ lang, setLang }), [lang, setLang]);
   return (
     <LangCtx.Provider value={value}>

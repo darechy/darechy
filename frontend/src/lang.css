@@ -1,0 +1,47 @@
+/* Плавная смена языка: текст мягко гаснет, пока меняются надписи, и так же мягко появляется. */
+
+main,
+.k-main,
+.ftr .wrap,
+.nav > a,
+.nav-ask,
+.brand-tag,
+.asst-head h2,
+.asst-body,
+.asst-form,
+.voice,
+.k-actions .k-btn {
+  transition: opacity 0.22s cubic-bezier(0.22, 0.61, 0.36, 1), filter 0.22s cubic-bezier(0.22, 0.61, 0.36, 1);
+}
+
+html.lang-out main,
+html.lang-out .k-main,
+html.lang-out .ftr .wrap,
+html.lang-out .nav > a,
+html.lang-out .nav-ask,
+html.lang-out .brand-tag,
+html.lang-out .asst-head h2,
+html.lang-out .asst-body,
+html.lang-out .asst-form,
+html.lang-out .voice,
+html.lang-out .k-actions .k-btn {
+  opacity: 0;
+  filter: blur(2px);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  html.lang-out main,
+  html.lang-out .k-main,
+  html.lang-out .ftr .wrap,
+  html.lang-out .nav > a,
+  html.lang-out .nav-ask,
+  html.lang-out .brand-tag,
+  html.lang-out .asst-head h2,
+  html.lang-out .asst-body,
+  html.lang-out .asst-form,
+  html.lang-out .voice,
+  html.lang-out .k-actions .k-btn {
+    opacity: 1;
+    filter: none;
+  }
+}
