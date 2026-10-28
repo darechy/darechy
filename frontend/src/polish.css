@@ -1,10 +1,9 @@
-/* Доводка: плавный hover кнопок и кнопка микрофона. Подключается последним. */
+/* Доводка: hover кнопок, микрофон, навигация назад, карточка помощи. Подключается последним. */
 
 :root {
   --ease-soft: cubic-bezier(0.22, 0.61, 0.36, 1);
 }
 
-/* lang.css перезаписывал список transition у кнопки ассистента: возвращаем всё вместе. */
 .btn,
 .nav-ask,
 .k-btn,
@@ -30,7 +29,6 @@
   box-shadow: 0 10px 26px rgba(90, 75, 242, 0.32);
 }
 
-/* Кнопка микрофона: круг с градиентом логотипа, мягкое свечение, пульс при записи. */
 .mic {
   width: 48px;
   height: 48px;
@@ -82,7 +80,6 @@
   }
 }
 
-/* Киоск: иконка микрофона в большой кнопке – круг с полупрозрачной заливкой, без рамки. */
 .k-voice-ic,
 .voice-ic {
   border: 0;
@@ -99,6 +96,70 @@
 
 .voice-btn.is-rec .voice-ic {
   animation: mic-pulse 1.6s ease-out infinite;
+}
+
+/* Ссылка «Главная»: кнопка-плашка со стрелкой, стрелка сдвигается при наведении. */
+.crumbs {
+  align-items: center;
+}
+
+.crumbs a.back-link {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 9px 16px 9px 12px;
+  background: #ffffff;
+  border: 1px solid rgba(37, 99, 235, 0.28);
+  border-radius: 2px;
+  color: var(--primary);
+  font-size: 15px;
+  font-weight: 700;
+  text-decoration: none;
+  box-shadow: 0 2px 8px rgba(35, 56, 131, 0.06);
+  transition:
+    background-color 0.35s var(--ease-soft),
+    border-color 0.35s var(--ease-soft),
+    box-shadow 0.5s var(--ease-soft),
+    transform 0.35s var(--ease-soft);
+}
+
+.crumbs a.back-link svg {
+  transition: transform 0.4s var(--ease-soft);
+}
+
+.crumbs a.back-link:hover {
+  background: #eef3ff;
+  border-color: var(--primary);
+  box-shadow: 0 8px 20px rgba(37, 99, 235, 0.16);
+  transform: translateY(-1px);
+}
+
+.crumbs a.back-link:hover svg {
+  transform: translateX(-4px);
+}
+
+/* Карточка «Остались вопросы?» рядом с маршрутом. */
+.help-card {
+  display: grid;
+  gap: 10px;
+  padding: 20px;
+  background: #ffffff;
+  border: 1px solid var(--line);
+  border-radius: 2px;
+}
+
+.help-card h3 {
+  font-size: 20px;
+}
+
+.help-card p {
+  color: var(--ink-2);
+  font-size: 14px;
+}
+
+.help-card .btn {
+  width: 100%;
+  margin-top: 6px;
 }
 
 @media (prefers-reduced-motion: reduce) {

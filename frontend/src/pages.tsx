@@ -11,6 +11,16 @@ import { useU } from './ui';
 // В данных бэкенда бывают заглушки с «❗»: убираем знак, текст оставляем.
 const clean = (s: string): string => s.replace(/^[\s\u2757\u203C\u26A0\uFE0F]+/, '');
 
+function BackLink() {
+  const { t } = useT();
+  return (
+    <a className='back-link' href='#/'>
+      <Icon name='back' size={18} />
+      {t('home')}
+    </a>
+  );
+}
+
 export function Status({ state }: { state: AsyncState<unknown> }) {
   const { t } = useT();
   if (state.kind === 'loading') return <p className='status'>{t('loading')}</p>;
@@ -246,7 +256,7 @@ function ServiceView({ service }: { service: Service }) {
   return (
     <article className='wrap section page'>
       <nav className='crumbs' aria-label='breadcrumbs'>
-        <a href='#/'>{t('home')}</a>
+        <BackLink />
         {parent && (
           <>
             <span>/</span>
@@ -351,6 +361,7 @@ export function ServicePage({ id }: { id: string }) {
 
 export function SituationPage({ id }: { id: string }) {
   const { t, lang } = useT();
+  const u = useU();
   const { services, situations, openAssistant } = useContext(AppCtx);
 
   if (situations.kind !== 'ok' || services.kind !== 'ok') {
@@ -372,37 +383,46 @@ export function SituationPage({ id }: { id: string }) {
   return (
     <article className='wrap section page'>
       <nav className='crumbs' aria-label='breadcrumbs'>
-        <a href='#/'>{t('home')}</a>
+        <BackLink />
       </nav>
       <header className='page-head'>
         <p className='eyebrow'>{t('route')}</p>
         <h1 className='page-title'>{title}</h1>
         {meta && <p className='lead'>{meta[lang].hint}</p>}
-        <button className='btn btn-primary btn-lg' type='button' onClick={() => openAssistant({ text: title })}>
-          {t('nav_ask')}
-        </button>
       </header>
 
-      <ol className='route'>
-        {steps.map((service, index) => (
-          <li key={service.id}>
-            <span className='route-n'>{index + 1}</span>
-            <div className='route-card'>
-              <h2>{service.title}</h2>
-              <p>{service.summary}</p>
-              <p className='route-meta'>
-                <span>
-                  {t('amount')}: {clean(service.amount)}
-                </span>
-                <span>
-                  {t('deadline')}: {clean(service.deadline)}
-                </span>
-              </p>
-              <a href={`#/service/${encodeURIComponent(service.id)}`}>{t('open_service')} →</a>
-            </div>
-          </li>
-        ))}
-      </ol>
+      <div className='cols'>
+        <ol className='route'>
+          {steps.map((service, index) => (
+            <li key={service.id}>
+              <span className='route-n'>{index + 1}</span>
+              <div className='route-card'>
+                <h2>{service.title}</h2>
+                <p>{service.summary}</p>
+                <p className='route-meta'>
+                  <span>
+                    {t('amount')}: {clean(service.amount)}
+                  </span>
+                  <span>
+                    {t('deadline')}: {clean(service.deadline)}
+                  </span>
+                </p>
+                <a href={`#/service/${encodeURIComponent(service.id)}`}>{t('open_service')} →</a>
+              </div>
+            </li>
+          ))}
+        </ol>
+
+        <aside className='aside'>
+          <div className='help-card'>
+            <h3>{u('s_help_t')}</h3>
+            <p>{u('s_help_d')}</p>
+            <button className='btn btn-primary' type='button' onClick={() => openAssistant({ text: title })}>
+              {t('nav_ask')}
+            </button>
+          </div>
+        </aside>
+      </div>
     </article>
   );
 }
