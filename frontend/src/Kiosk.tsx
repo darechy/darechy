@@ -9,6 +9,8 @@ import type { Route } from './router';
 import { speak, stopSpeaking } from './speech';
 import { useU } from './ui';
 
+const clean = (s: string): string => s.replace(/^[\s\u2757\u203C\u26A0\uFE0F]+/, '');
+
 function KioskHome() {
   const u = useU();
   const { openAssistant, situations } = useContext(AppCtx);
@@ -130,11 +132,11 @@ function KioskService({ id }: { id: string }) {
     const text = [
       service.title,
       service.summary,
-      `${u('k_who')}: ${service.who}`,
-      `${u('k_amount')}: ${service.amount}`,
-      `${u('k_when')}: ${service.deadline}`,
+      `${u('k_who')}: ${clean(service.who)}`,
+      `${u('k_amount')}: ${clean(service.amount)}`,
+      `${u('k_when')}: ${clean(service.deadline)}`,
       `${u('k_bring')}:`,
-      ...service.checklist.map((row, i) => `${i + 1}. ${row.item}. ${u('k_where')} ${row.where}`),
+      ...service.checklist.map((row, i) => `${i + 1}. ${clean(row.item)}. ${u('k_where')} ${clean(row.where)}`),
     ].join('. ');
     setReading(true);
     speak(text, lang as Lang, () => setReading(false));
@@ -157,15 +159,15 @@ function KioskService({ id }: { id: string }) {
       <div className='k-facts'>
         <div>
           <span>{u('k_who')}</span>
-          <strong>{service.who}</strong>
+          <strong>{clean(service.who)}</strong>
         </div>
         <div>
           <span>{u('k_amount')}</span>
-          <strong>{service.amount}</strong>
+          <strong>{clean(service.amount)}</strong>
         </div>
         <div>
           <span>{u('k_when')}</span>
-          <strong>{service.deadline}</strong>
+          <strong>{clean(service.deadline)}</strong>
         </div>
       </div>
 
@@ -175,9 +177,9 @@ function KioskService({ id }: { id: string }) {
           <li key={index}>
             <span className='k-step-n'>{index + 1}</span>
             <span>
-              <strong>{row.item}</strong>
+              <strong>{clean(row.item)}</strong>
               <small>
-                {u('k_where')} {row.where}
+                {u('k_where')} {clean(row.where)}
               </small>
             </span>
           </li>
@@ -190,7 +192,7 @@ function KioskService({ id }: { id: string }) {
           {service.sources.map((source, index) => (
             <li key={index}>
               {source.title}
-              {source.point ? ` — ${source.point}` : ''}
+              {source.point ? ` – ${source.point}` : ''}
             </li>
           ))}
         </ul>
@@ -217,7 +219,7 @@ export function KioskApp({ route }: { route: Route }) {
     <div className='k'>
       <header className='k-bar'>
         <a className='k-brand' href='#/'>
-          <BrandMark size={48} /> ДаРэчы
+          <BrandMark size={56} />
         </a>
         <div className='k-actions'>
           {!atHome && (
