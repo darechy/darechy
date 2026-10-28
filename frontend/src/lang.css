@@ -1,11 +1,10 @@
-/* Плавная смена языка: текст мягко гаснет, пока меняются надписи, и так же мягко появляется. */
+/* Плавная смена языка + одинаковая высота переключателя и кнопки ассистента. */
 
 main,
 .k-main,
 .ftr .wrap,
 .nav > a,
 .nav-ask,
-.brand-tag,
 .asst-head h2,
 .asst-body,
 .asst-form,
@@ -19,7 +18,6 @@ html.lang-out .k-main,
 html.lang-out .ftr .wrap,
 html.lang-out .nav > a,
 html.lang-out .nav-ask,
-html.lang-out .brand-tag,
 html.lang-out .asst-head h2,
 html.lang-out .asst-body,
 html.lang-out .asst-form,
@@ -29,13 +27,30 @@ html.lang-out .k-actions .k-btn {
   filter: blur(2px);
 }
 
+/* Одинаковая высота: переключатель языка и «Спросить ассистента». */
+.nav .lang {
+  height: 46px;
+  align-items: stretch;
+}
+
+.nav .lang button {
+  height: 100%;
+  padding: 0 16px;
+  font-size: 14px;
+}
+
+.nav .nav-ask {
+  height: 46px;
+  padding-top: 0;
+  padding-bottom: 0;
+}
+
 @media (prefers-reduced-motion: reduce) {
   html.lang-out main,
   html.lang-out .k-main,
   html.lang-out .ftr .wrap,
   html.lang-out .nav > a,
   html.lang-out .nav-ask,
-  html.lang-out .brand-tag,
   html.lang-out .asst-head h2,
   html.lang-out .asst-body,
   html.lang-out .asst-form,

@@ -111,7 +111,6 @@ function Shell() {
               <a className='brand' href='#/' aria-label='ДаРэчы'>
                 <BrandMark size={48} />
                 <span className='brand-name'>ДаРэчы</span>
-                <span className='brand-tag'>{t('brand_tag')}</span>
               </a>
               <nav className='nav' aria-label='main'>
                 <a href='#/situations'>{t('nav_situations')}</a>
@@ -160,7 +159,6 @@ function Shell() {
 export default function App() {
   const [lang, setLangState] = useState<Lang>(storedLang);
 
-  // Сначала плавно гасим текст, потом меняем язык и плавно возвращаем.
   const setLang = useCallback(
     (next: Lang) => {
       if (next === lang) return;
