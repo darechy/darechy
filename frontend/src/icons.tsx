@@ -26,15 +26,8 @@ export function Icon({ name, size = 24 }: { name: IconName; size?: number }) {
   );
 }
 
-export function BrandMark({ size = 30 }: { size?: number }) {
-  return (
-    <svg viewBox='0 0 32 32' width={size} height={size} aria-hidden='true' focusable='false'>
-      <path fill='var(--primary)' d='M5 2h14.2L27 9.8V30H5z' />
-      <path fill='var(--bg)' d='M19.2 2v7.8H27' />
-      <path d='M10 15.5h12' stroke='var(--mark)' strokeWidth='2.2' strokeLinecap='square' />
-      <path d='M10 20h9M10 24h6' stroke='var(--bg)' strokeWidth='1.7' strokeLinecap='square' />
-    </svg>
-  );
+export function BrandMark({ size = 42 }: { size?: number }) {
+  return <img className='brand-logo' src='/logo.svg' alt='' height={size} />;
 }
 
 const SITUATION_ICONS: Record<string, IconName> = {

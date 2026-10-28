@@ -1,0 +1,57 @@
+/* Палитра из logo.svg. Белорусская линия — только под шапкой. */
+
+:root {
+  --bg: #f2f4fa;
+  --surface: #ffffff;
+  --ink: #233883;
+  --ink-2: #5b678a;
+  --line: #d7deee;
+  --primary: #2563eb;
+  --primary-dark: #1d4ed8;
+  --mark: #5a4bf2;
+  --soft: #e8eefb;
+  --ok: #1c4a3a;
+  --warn-bg: #f4efe4;
+  --warn: #6d5428;
+}
+
+.btn-primary,
+.k-btn-primary,
+.k-voice,
+.voice-btn {
+  background: linear-gradient(120deg, #2563eb, #5a4bf2);
+  border-color: transparent;
+  color: #fff;
+}
+
+.btn-primary:hover:not(:disabled) {
+  background: #1d4ed8;
+}
+
+.hdr::after,
+.k-bar::after,
+.ftr::before {
+  height: 3px;
+  background: linear-gradient(#c8102e, #c8102e) 0 0 / 100% 1px no-repeat, #1c4a3a;
+}
+
+.brand-name {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+}
+
+.brand-logo {
+  display: block;
+  height: 42px;
+  width: auto;
+}
+
+.k-brand {
+  font-size: 0;
+}
+
+.k-brand .brand-logo {
+  height: 56px;
+}
