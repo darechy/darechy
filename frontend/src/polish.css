@@ -1,0 +1,109 @@
+/* Доводка: плавный hover кнопок и кнопка микрофона. Подключается последним. */
+
+:root {
+  --ease-soft: cubic-bezier(0.22, 0.61, 0.36, 1);
+}
+
+/* lang.css перезаписывал список transition у кнопки ассистента: возвращаем всё вместе. */
+.btn,
+.nav-ask,
+.k-btn,
+.k-actions .k-btn {
+  transition:
+    opacity 0.22s var(--ease-soft),
+    filter 0.22s var(--ease-soft),
+    background-color 0.35s var(--ease-soft),
+    background-position 0.7s var(--ease-soft),
+    border-color 0.35s var(--ease-soft),
+    box-shadow 0.55s var(--ease-soft),
+    color 0.3s var(--ease-soft),
+    transform 0.35s var(--ease-soft);
+}
+
+.btn-primary,
+.k-btn-primary {
+  box-shadow: 0 0 0 rgba(90, 75, 242, 0);
+}
+
+.btn-primary:hover:not(:disabled),
+.k-btn-primary:hover {
+  box-shadow: 0 10px 26px rgba(90, 75, 242, 0.32);
+}
+
+/* Кнопка микрофона: круг с градиентом логотипа, мягкое свечение, пульс при записи. */
+.mic {
+  width: 48px;
+  height: 48px;
+  flex: none;
+  border: 0;
+  border-radius: 50%;
+  background: linear-gradient(135deg, #2563eb 0%, #5a4bf2 100%);
+  background-size: 160% 160%;
+  background-position: 0% 50%;
+  color: #ffffff;
+  display: grid;
+  place-items: center;
+  cursor: pointer;
+  box-shadow: 0 6px 16px rgba(37, 99, 235, 0.28);
+  transition:
+    transform 0.35s var(--ease-soft),
+    box-shadow 0.5s var(--ease-soft),
+    background-position 0.6s var(--ease-soft),
+    background-color 0.3s var(--ease-soft);
+}
+
+.mic:hover {
+  background: linear-gradient(135deg, #2563eb 0%, #5a4bf2 100%);
+  background-size: 160% 160%;
+  background-position: 100% 50%;
+  transform: scale(1.07);
+  box-shadow: 0 10px 24px rgba(90, 75, 242, 0.38);
+}
+
+.mic:active {
+  transform: scale(0.96);
+}
+
+.mic.is-rec {
+  background: #233883;
+  color: #ffffff;
+  animation: mic-pulse 1.6s ease-out infinite;
+}
+
+@keyframes mic-pulse {
+  0% {
+    box-shadow: 0 0 0 0 rgba(37, 99, 235, 0.5);
+  }
+  70% {
+    box-shadow: 0 0 0 16px rgba(37, 99, 235, 0);
+  }
+  100% {
+    box-shadow: 0 0 0 0 rgba(37, 99, 235, 0);
+  }
+}
+
+/* Киоск: иконка микрофона в большой кнопке – круг с полупрозрачной заливкой, без рамки. */
+.k-voice-ic,
+.voice-ic {
+  border: 0;
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.2);
+  transform: none;
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.28);
+}
+
+.k-voice-ic svg,
+.voice-ic svg {
+  transform: none;
+}
+
+.voice-btn.is-rec .voice-ic {
+  animation: mic-pulse 1.6s ease-out infinite;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .mic.is-rec,
+  .voice-btn.is-rec .voice-ic {
+    animation: none !important;
+  }
+}
