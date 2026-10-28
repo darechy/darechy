@@ -9,6 +9,7 @@ import "./polish.css";
 import "./layout.css";
 import "./kiosk.css";
 import "./kiosk-list.css";
+import "./kiosk-chat.css";
 
 createRoot(document.getElementById("root")!).render(
   <StrictMode>
