@@ -14,16 +14,16 @@
   --warn-bg: #f4efe4;
   --warn: #6d5428;
   --band-top: #ffffff;
-  --band-hero: #e9eefb;
-  --band-foot: #e2e8f6;
+  --band-hero: #f2f4fa;
+  --band-foot: #ffffff;
 }
 
-/* Шапка, основа и подвал отделены цветом фона, без линий. */
+/* Шапка и подвал белые, основа #F2F4FA. Без линий. */
 .hdr,
 .k-bar {
   background: var(--band-top);
   border-bottom: 0;
-  box-shadow: 0 1px 0 rgba(35, 56, 131, 0.05);
+  box-shadow: none;
 }
 
 .hdr::after,
