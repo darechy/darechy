@@ -1,4 +1,4 @@
-/* Компоновка: строка действий услуги и адаптивный слайдер. Подключается после polish.css. */
+/* Компоновка: строка действий услуги, адаптивный слайдер, кнопки слайдера. Подключается после polish.css. */
 
 /* Две кнопки услуги – в одну строку под описанием. */
 .page-actions {
@@ -47,6 +47,38 @@
   .slider-track .svc {
     flex: 0 0 88%;
   }
+}
+
+/* Кнопки слайдера: обе рисуются одним правилом – зеркальные шевроны. */
+.slider-btn svg {
+  display: none;
+}
+
+.slider-btn::before {
+  content: '';
+  display: block;
+  width: 9px;
+  height: 9px;
+  border: solid currentColor;
+  border-width: 0 2.2px 2.2px 0;
+  border-radius: 1px;
+}
+
+.slider-btn:last-child::before {
+  transform: translateX(-2px) rotate(-45deg);
+}
+
+.slider-btn:first-child::before {
+  transform: translateX(2px) rotate(135deg);
+}
+
+.slider-btn:focus {
+  outline: none;
+}
+
+.slider-btn:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.35);
 }
 
 @media print {
