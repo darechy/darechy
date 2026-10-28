@@ -1,7 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <svg xmlns="http://www.w3.org/2000/svg" fill="none" height="320" viewBox="100 350 830 320" width="820">
 <g clip-path="url(#clip0_13_2)">
-<path d="M1024 0H0V1024H1024V0Z" fill="url(#paint0_radial_13_2)"/>
 <path d="M156 424C156 415 163 408 172 408H238C312 408 368 459 368 525C368 590 312 641 238 641H174C164 641 156 633 156 623V424Z" fill="url(#paint1_linear_13_2)"/>
 <path d="M129 424C129 415 136 408 145 408H222V619H145C136 619 129 612 129 603V424Z" fill="url(#paint2_linear_13_2)"/>
 <path d="M203 461H240C276 461 302 485 302 517C302 549 276 573 240 573H203V461Z" fill="#8C78FA" fill-opacity="0.38"/>
@@ -42,10 +41,6 @@
 <feBlend in="SourceGraphic" in2="BackgroundImageFix" mode="normal" result="shape"/>
 <feGaussianBlur result="effect1_foregroundBlur_13_2" stdDeviation="2.5"/>
 </filter>
-<radialGradient cx="0" cy="0" gradientTransform="translate(358.4 491.52) scale(716.8)" gradientUnits="userSpaceOnUse" id="paint0_radial_13_2" r="1">
-<stop stop-color="white"/>
-<stop offset="1" stop-color="#F2F4FA"/>
-</radialGradient>
 <linearGradient gradientUnits="userSpaceOnUse" id="paint1_linear_13_2" x1="156" x2="368" y1="408" y2="641">
 <stop stop-color="#3876F6"/>
 <stop offset="0.5" stop-color="#5A4BF2"/>
