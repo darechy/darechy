@@ -51,7 +51,8 @@ body {
 }
 
 @media (max-width: 640px) {
-  /* Шапка: логотип и переключатель языка в одну строку. */
+  /* Шапка: логотип и переключатель языка в одну строку. Кнопка «Спросить ассистента» в шапке
+     на телефоне не помещается, поэтому скрыта: спросить можно через поле на главной. */
   .hdr-row {
     height: 60px;
     gap: 10px;
@@ -70,36 +71,40 @@ body {
     font-size: 14px;
   }
 
-  /* «Спросить ассистента» – закрепленная полоса внизу экрана, под большим пальцем. */
   .nav .nav-ask {
-    position: fixed;
-    left: 16px;
-    right: 16px;
-    bottom: max(14px, env(safe-area-inset-bottom));
-    z-index: 25;
-    width: auto;
-    min-width: 0;
-    height: 54px;
-    font-size: 17px;
-    box-shadow: 0 14px 34px rgba(90, 75, 242, 0.38);
+    display: none;
   }
 
-  body {
-    padding-bottom: 88px;
-  }
-
-  /* Поле вопроса: кнопка под полем на всю ширину. */
+  /* Поле вопроса: поле и кнопка – два отдельных элемента с промежутком. */
   .askbox-row {
     flex-direction: column;
+    gap: 12px;
+    border: 0;
+    background: transparent;
+    overflow: visible;
   }
 
   .askbox-row input {
     padding: 14px 16px;
+    background: #ffffff;
+    border: 1px solid var(--ink);
+    border-radius: 0;
+    outline: none;
+  }
+
+  .askbox-row input:focus {
+    border-color: var(--primary);
   }
 
   .askbox-row .btn {
     width: 100%;
     padding: 14px 20px;
+    border-radius: 2px;
+  }
+
+  /* Слайдер услуг на телефоне листается свайпом, без кнопок. */
+  .slider-ctl {
+    display: none;
   }
 
   .principles {
