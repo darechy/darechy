@@ -10,6 +10,7 @@ import "./layout.css";
 import "./kiosk.css";
 import "./kiosk-list.css";
 import "./kiosk-chat.css";
+import "./kiosk-fix.css";
 
 createRoot(document.getElementById("root")!).render(
   <StrictMode>
