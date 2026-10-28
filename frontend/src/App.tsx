@@ -1,3 +1,4 @@
+import { flushSync } from 'react-dom';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 
 import Assistant, { type AssistantRequest } from './Assistant';
@@ -19,7 +20,6 @@ const PARAMS = new URLSearchParams(window.location.search);
 const KIOSK = PARAMS.get('kiosk') === '1';
 // Тест слайдера: открыть сайт с ?stub=1 – к каталогу подмешивается четвёртая услуга. Без параметра её нет.
 const STUB_ON = PARAMS.get('stub') === '1';
-const LANG_FADE_MS = 220;
 
 const STUB_SERVICE: Service = {
   id: 'stub-demo',
@@ -195,23 +195,35 @@ function Shell() {
   );
 }
 
+type ViewTransitionDoc = { startViewTransition?: (callback: () => void) => unknown };
+
 export default function App() {
   const [lang, setLangState] = useState<Lang>(storedLang);
 
+  // Смена языка: старая версия остаётся на экране, новая проявляется «шторкой» (lang.css).
   const setLang = useCallback(
     (next: Lang) => {
       if (next === lang) return;
-      const root = document.documentElement;
-      root.classList.add('lang-out');
-      window.setTimeout(() => {
-        setLangState(next);
+      const apply = () => {
+        flushSync(() => setLangState(next));
         try {
           localStorage.setItem('darechy:lang', next);
         } catch {
           /* ignore */
         }
-        window.requestAnimationFrame(() => window.requestAnimationFrame(() => root.classList.remove('lang-out')));
-      }, LANG_FADE_MS);
+      };
+      const doc = document as unknown as ViewTransitionDoc;
+      const reduced = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+      if (doc.startViewTransition && !reduced) {
+        doc.startViewTransition(apply);
+        return;
+      }
+      apply();
+      if (!reduced) {
+        const root = document.documentElement;
+        root.classList.add('lang-soft');
+        window.setTimeout(() => root.classList.remove('lang-soft'), 600);
+      }
     },
     [lang],
   );

@@ -1,31 +1,80 @@
-/* Плавная смена языка, высота переключателя, поле вопроса и блок принципов. */
+/* Смена языка, высота переключателя, поле вопроса, блок принципов. */
 
-main,
-.k-main,
-.ftr .wrap,
-.nav > a,
-.nav-ask,
-.asst-head h2,
-.asst-body,
-.asst-form,
-.voice,
-.k-actions .k-btn {
-  transition: opacity 0.22s cubic-bezier(0.22, 0.61, 0.36, 1), filter 0.22s cubic-bezier(0.22, 0.61, 0.36, 1);
+/* ---------- Анимация смены языка ----------
+   Старая версия страницы остаётся на экране, новая проявляется поверх неё
+   слева направо с размытой кромкой. Содержимое никогда не пропадает. */
+@property --wipe {
+  syntax: '<percentage>';
+  inherits: false;
+  initial-value: 0%;
 }
 
-html.lang-out main,
-html.lang-out .k-main,
-html.lang-out .ftr .wrap,
-html.lang-out .nav > a,
-html.lang-out .nav-ask,
-html.lang-out .asst-head h2,
-html.lang-out .asst-body,
-html.lang-out .asst-form,
-html.lang-out .voice,
-html.lang-out .k-actions .k-btn {
-  opacity: 0;
-  filter: blur(2px);
+::view-transition-group(root) {
+  animation-duration: 0.85s;
 }
+
+::view-transition-old(root) {
+  animation: none;
+  mix-blend-mode: normal;
+}
+
+::view-transition-new(root) {
+  mix-blend-mode: normal;
+  animation: lang-wipe 0.85s cubic-bezier(0.22, 0.61, 0.36, 1) both;
+  -webkit-mask-image: linear-gradient(90deg, #000 calc(var(--wipe) - 16%), transparent var(--wipe));
+  mask-image: linear-gradient(90deg, #000 calc(var(--wipe) - 16%), transparent var(--wipe));
+}
+
+@keyframes lang-wipe {
+  from {
+    --wipe: 0%;
+  }
+  to {
+    --wipe: 120%;
+  }
+}
+
+/* Запасной вариант для браузеров без View Transitions: текст мягко «вспыхивает». */
+@keyframes lang-soft {
+  from {
+    opacity: 0.35;
+    transform: translateY(3px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+html.lang-soft main,
+html.lang-soft .k-main,
+html.lang-soft .ftr .wrap,
+html.lang-soft .nav > a,
+html.lang-soft .nav-ask,
+html.lang-soft .asst-body,
+html.lang-soft .voice {
+  animation: lang-soft 0.55s cubic-bezier(0.22, 0.61, 0.36, 1) both;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  ::view-transition-group(*),
+  ::view-transition-old(*),
+  ::view-transition-new(*) {
+    animation: none !important;
+  }
+
+  html.lang-soft main,
+  html.lang-soft .k-main,
+  html.lang-soft .ftr .wrap,
+  html.lang-soft .nav > a,
+  html.lang-soft .nav-ask,
+  html.lang-soft .asst-body,
+  html.lang-soft .voice {
+    animation: none;
+  }
+}
+
+/* ---------- Высота переключателя языка и кнопки ассистента ---------- */
 
 .nav .lang {
   height: 46px;
@@ -44,7 +93,8 @@ html.lang-out .k-actions .k-btn {
   padding-bottom: 0;
 }
 
-/* Поле вопроса на главной: кнопка впритык, без отступов и скруглений. */
+/* ---------- Поле вопроса на главной: кнопка впритык, без скруглений ---------- */
+
 .askbox-row {
   display: flex;
   align-items: stretch;
@@ -74,7 +124,8 @@ html.lang-out .k-actions .k-btn {
   border-color: var(--primary);
 }
 
-/* Блок «На чём это стоит»: пункты равномерно занимают всю высоту карточки. */
+/* ---------- Блок «На чём это стоит» ---------- */
+
 .principles {
   display: flex;
   flex-direction: column;
@@ -84,20 +135,4 @@ html.lang-out .k-actions .k-btn {
   flex: 1;
   justify-content: space-between;
   gap: 18px;
-}
-
-@media (prefers-reduced-motion: reduce) {
-  html.lang-out main,
-  html.lang-out .k-main,
-  html.lang-out .ftr .wrap,
-  html.lang-out .nav > a,
-  html.lang-out .nav-ask,
-  html.lang-out .asst-head h2,
-  html.lang-out .asst-body,
-  html.lang-out .asst-form,
-  html.lang-out .voice,
-  html.lang-out .k-actions .k-btn {
-    opacity: 1;
-    filter: none;
-  }
 }
