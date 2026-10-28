@@ -2,7 +2,8 @@
 
 /* ---------- Анимация смены языка ----------
    Старая версия страницы остаётся на экране, новая проявляется поверх неё
-   слева направо с размытой кромкой. Содержимое никогда не пропадает. */
+   слева направо с широкой размытой кромкой. Содержимое никогда не пропадает.
+   Три числа для настройки: длительность (1.2s), ширина кромки (30%), кривая. */
 @property --wipe {
   syntax: '<percentage>';
   inherits: false;
@@ -10,7 +11,7 @@
 }
 
 ::view-transition-group(root) {
-  animation-duration: 0.85s;
+  animation-duration: 1.2s;
 }
 
 ::view-transition-old(root) {
@@ -20,9 +21,9 @@
 
 ::view-transition-new(root) {
   mix-blend-mode: normal;
-  animation: lang-wipe 0.85s cubic-bezier(0.22, 0.61, 0.36, 1) both;
-  -webkit-mask-image: linear-gradient(90deg, #000 calc(var(--wipe) - 16%), transparent var(--wipe));
-  mask-image: linear-gradient(90deg, #000 calc(var(--wipe) - 16%), transparent var(--wipe));
+  animation: lang-wipe 1.2s cubic-bezier(0.45, 0.05, 0.2, 1) both;
+  -webkit-mask-image: linear-gradient(90deg, #000 calc(var(--wipe) - 30%), transparent var(--wipe));
+  mask-image: linear-gradient(90deg, #000 calc(var(--wipe) - 30%), transparent var(--wipe));
 }
 
 @keyframes lang-wipe {
@@ -30,7 +31,7 @@
     --wipe: 0%;
   }
   to {
-    --wipe: 120%;
+    --wipe: 130%;
   }
 }
 
@@ -53,7 +54,7 @@ html.lang-soft .nav > a,
 html.lang-soft .nav-ask,
 html.lang-soft .asst-body,
 html.lang-soft .voice {
-  animation: lang-soft 0.55s cubic-bezier(0.22, 0.61, 0.36, 1) both;
+  animation: lang-soft 0.7s cubic-bezier(0.22, 0.61, 0.36, 1) both;
 }
 
 @media (prefers-reduced-motion: reduce) {
