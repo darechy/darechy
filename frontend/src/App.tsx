@@ -18,6 +18,20 @@ const WARN_MS = 30_000;
 const KIOSK = new URLSearchParams(window.location.search).get('kiosk') === '1';
 const LANG_FADE_MS = 220;
 
+// Убираем ведущие «❗» из данных бэкенда: эмодзи в интерфейсе не используем.
+const strip = (s: string): string => s.replace(/^[\s\u2757\u203C\u26A0\uFE0F]+/, '');
+
+const cleanService = (s: Service): Service => ({
+  ...s,
+  title: strip(s.title),
+  summary: strip(s.summary),
+  who: strip(s.who),
+  amount: strip(s.amount),
+  deadline: strip(s.deadline),
+  checklist: s.checklist.map((row) => ({ item: strip(row.item), where: strip(row.where) })),
+  sources: s.sources.map((src) => ({ ...src, title: strip(src.title), point: src.point ? strip(src.point) : src.point })),
+});
+
 function storedLang(): Lang {
   try {
     return localStorage.getItem('darechy:lang') === 'be' ? 'be' : 'ru';
@@ -37,9 +51,11 @@ function Shell() {
   const [session, setSession] = useState(0);
   const [warn, setWarn] = useState(false);
 
-  // Каталог услуг с бэкенда – по-русски; в БЕЛ подменяем тексты по id.
   const services = useMemo<AsyncState<Service[]>>(
-    () => (rawServices.kind === 'ok' ? { kind: 'ok', data: rawServices.data.map((s) => localizeService(s, lang)) } : rawServices),
+    () =>
+      rawServices.kind === 'ok'
+        ? { kind: 'ok', data: rawServices.data.map((s) => cleanService(localizeService(s, lang))) }
+        : rawServices,
     [rawServices, lang],
   );
 

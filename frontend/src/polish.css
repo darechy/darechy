@@ -1,4 +1,4 @@
-/* Доводка: hover кнопок, микрофон, полоса «Главная», маршрут. Подключается последним. */
+/* Доводка: hover кнопок, микрофон, полоса «Главная», маршрут, чеклист, источники, слайдер. Подключается последним. */
 
 :root {
   --ease-soft: cubic-bezier(0.22, 0.61, 0.36, 1);
@@ -163,7 +163,7 @@ a.backbar-trail:hover {
   color: var(--primary);
 }
 
-/* ---------- Маршрут: узлы, линия, финальный шаг «?» ---------- */
+/* ---------- Маршрут ---------- */
 
 .route {
   max-width: 880px;
@@ -243,9 +243,190 @@ a.backbar-trail:hover {
   }
 }
 
+/* ---------- Боковая колонка услуги: кнопки обычного размера ---------- */
+
+.cols {
+  align-items: start;
+}
+
+.aside {
+  align-self: start;
+  align-content: start;
+  grid-auto-rows: min-content;
+}
+
+.aside .btn,
+.aside .btn-lg {
+  min-height: 46px;
+  padding: 0 18px;
+  font-size: 16px;
+}
+
+/* ---------- Чеклист: галочка вместо простой заливки ---------- */
+
+.checklist .box {
+  display: grid;
+  place-items: center;
+  width: 22px;
+  height: 22px;
+  margin-top: 2px;
+  border: 1.5px solid var(--ink-2);
+  border-radius: 2px;
+  background: #ffffff;
+  transition:
+    background-color 0.3s var(--ease-soft),
+    border-color 0.3s var(--ease-soft),
+    box-shadow 0.4s var(--ease-soft);
+}
+
+.checklist .box::after {
+  content: '';
+  display: block;
+  width: 6px;
+  height: 11px;
+  margin-top: -2px;
+  border: solid #ffffff;
+  border-width: 0 2.5px 2.5px 0;
+  transform: rotate(45deg) scale(0);
+  transition: transform 0.3s var(--ease-soft);
+}
+
+.checklist input:checked + .box {
+  background: linear-gradient(135deg, #2563eb, #5a4bf2);
+  border-color: transparent;
+  box-shadow: 0 4px 10px rgba(37, 99, 235, 0.3);
+}
+
+.checklist input:checked + .box::after {
+  transform: rotate(45deg) scale(1);
+}
+
+.checklist label:hover .box {
+  border-color: var(--primary);
+}
+
+/* ---------- Источники ---------- */
+
+.sources {
+  gap: 10px;
+}
+
+.sources li {
+  display: grid;
+  grid-template-columns: 36px 1fr;
+  gap: 12px;
+  align-items: start;
+  padding: 14px 16px;
+  background: #ffffff;
+  border: 1px solid var(--line);
+  border-left: 3px solid var(--primary);
+  border-radius: 2px;
+  transition:
+    box-shadow 0.5s var(--ease-soft),
+    transform 0.35s var(--ease-soft);
+}
+
+.sources li:hover {
+  box-shadow: var(--lift);
+  transform: translateY(-1px);
+}
+
+.src-ic {
+  display: grid;
+  place-items: center;
+  width: 36px;
+  height: 36px;
+  color: var(--primary);
+  background: #eef3ff;
+  border-radius: 2px;
+}
+
+.sources a,
+.src-title {
+  color: var(--ink);
+  font-weight: 700;
+  line-height: 1.4;
+  text-decoration: none;
+  transition: color 0.3s var(--ease-soft);
+}
+
+.sources a:hover {
+  color: var(--primary);
+}
+
+.sources small {
+  margin-top: 3px;
+}
+
+/* ---------- Слайдер услуг ---------- */
+
+.slider-ctl {
+  display: flex;
+  gap: 8px;
+  margin-left: auto;
+}
+
+.slider-btn {
+  display: grid;
+  place-items: center;
+  width: 42px;
+  height: 42px;
+  background: #ffffff;
+  border: 1px solid var(--line);
+  border-radius: 50%;
+  color: var(--primary);
+  cursor: pointer;
+  transition:
+    background-color 0.35s var(--ease-soft),
+    color 0.3s var(--ease-soft),
+    transform 0.35s var(--ease-soft),
+    box-shadow 0.5s var(--ease-soft),
+    opacity 0.3s var(--ease-soft);
+}
+
+.slider-btn:hover:not(:disabled) {
+  background: linear-gradient(135deg, #2563eb, #5a4bf2);
+  color: #ffffff;
+  border-color: transparent;
+  transform: scale(1.06);
+  box-shadow: 0 8px 20px rgba(90, 75, 242, 0.32);
+}
+
+.slider-btn:disabled {
+  opacity: 0.35;
+  cursor: default;
+}
+
+.slider-track {
+  display: flex;
+  gap: 14px;
+  margin: 0 -4px;
+  padding: 10px 4px 26px;
+  overflow-x: auto;
+  scroll-snap-type: x mandatory;
+  scroll-behavior: smooth;
+  scrollbar-width: thin;
+  scrollbar-color: rgba(37, 99, 235, 0.35) transparent;
+}
+
+.slider-track .svc {
+  flex: 0 0 340px;
+  scroll-snap-align: start;
+}
+
+@media (max-width: 560px) {
+  .slider-track .svc {
+    flex-basis: 86%;
+  }
+}
+
 @media (prefers-reduced-motion: reduce) {
   .mic.is-rec,
   .voice-btn.is-rec .voice-ic {
     animation: none !important;
+  }
+
+  .slider-track {
+    scroll-behavior: auto;
   }
 }
