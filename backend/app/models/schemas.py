@@ -69,7 +69,69 @@ class ChatResponse(BaseModel):
     refusal: bool = False
     suggested_services: list[str] = Field(default_factory=list)
     latency_ms: int = 0
+    # Каким слоем получен ответ: "taught" — выученный администратором,
+    # "corpus" — сгенерирован по корпусу, "extractive" — дословный фрагмент
+    # без модели, "refusal" — честный отказ. Портал помечает выученные ответы.
+    source: str = "corpus"
 
 
 class RefusalDetail(BaseModel):
     reason: str
+
+
+# --- «Доучивание»: ответы, подтверждённые администратором -------------------
+
+
+class TaughtSource(BaseModel):
+    """Ссылка на норму в выученном ответе.
+
+    `chunk_id` обязателен и проверяется по корпусу: выучить ответ без
+    подтверждённого источника нельзя — иначе рушится главный принцип проекта.
+    """
+
+    chunk_id: str
+    note: str | None = None
+
+
+class TaughtAnswer(BaseModel):
+    id: str
+    question: str
+    answer: str
+    # Триггеры срабатывания. match_mode=any — достаточно одного слова.
+    keywords: list[str] = Field(min_length=1)
+    match_mode: str = "all"  # "all" | "any"
+    service_id: str | None = None
+    sources: list[TaughtSource] = Field(min_length=1)
+    enabled: bool = True
+    author: str | None = None
+    created_at: str
+    updated_at: str
+
+
+class TaughtAnswerCreate(BaseModel):
+    question: str = Field(min_length=3)
+    answer: str = Field(min_length=1)
+    keywords: list[str] = Field(min_length=1)
+    match_mode: str = "all"
+    service_id: str | None = None
+    sources: list[TaughtSource] = Field(min_length=1)
+    enabled: bool = True
+    author: str | None = None
+
+
+class TaughtAnswerUpdate(BaseModel):
+    question: str | None = None
+    answer: str | None = None
+    keywords: list[str] | None = None
+    match_mode: str | None = None
+    service_id: str | None = None
+    sources: list[TaughtSource] | None = None
+    enabled: bool | None = None
+
+
+class TaughtMatch(BaseModel):
+    """Результат проверки: сработал ли выученный ответ на запрос."""
+
+    taught: TaughtAnswer
+    matched_keywords: list[str]
+    score: float
