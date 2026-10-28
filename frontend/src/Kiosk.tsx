@@ -1,8 +1,9 @@
 import { useContext, useState } from 'react';
+import type { FormEvent } from 'react';
 
 import type { Service } from './api';
 import { AppCtx } from './context';
-import { SITUATIONS, useT, type Lang } from './i18n';
+import { EXAMPLES, SITUATIONS, useT, type Lang } from './i18n';
 import { BrandMark, Icon, situationIcon } from './icons';
 import { Status, useSituationCards } from './pages';
 import type { Route } from './router';
@@ -13,22 +14,56 @@ const clean = (s: string): string => s.replace(/^[\s\u2757\u203C\u26A0\uFE0F]+/,
 
 function KioskHome() {
   const u = useU();
+  const { t, lang } = useT();
   const { openAssistant, situations } = useContext(AppCtx);
   const cards = useSituationCards().filter((c) => c.active);
+  const [question, setQuestion] = useState('');
+
+  const submit = (event: FormEvent) => {
+    event.preventDefault();
+    if (!question.trim()) return;
+    openAssistant({ text: question });
+    setQuestion('');
+  };
+
   return (
     <>
       <h1 className='k-title'>{u('k_title')}</h1>
       <p className='k-sub'>{u('k_sub')}</p>
 
-      <button className='k-voice' type='button' onClick={() => openAssistant({ voice: true })}>
-        <span className='k-voice-ic'>
-          <Icon name='mic' size={56} />
-        </span>
-        <span>
-          <strong>{u('k_voice')}</strong>
-          <small>{u('k_voice_d')}</small>
-        </span>
-      </button>
+      <form className='k-ask' onSubmit={submit}>
+        <label className='k-ask-label' htmlFor='k-q'>
+          {t('ask_label')}
+        </label>
+        <div className='k-ask-row'>
+          <input id='k-q' value={question} onChange={(event) => setQuestion(event.target.value)} placeholder={t('ask_ph')} autoComplete='off' />
+          <button className='k-ask-send' type='submit' disabled={!question.trim()}>
+            {t('ask_btn')}
+          </button>
+        </div>
+
+        <ul className='k-ask-chips'>
+          {EXAMPLES[lang].map((example) => (
+            <li key={example}>
+              <button className='k-chip' type='button' onClick={() => openAssistant({ text: example })}>
+                {example}
+              </button>
+            </li>
+          ))}
+        </ul>
+
+        <div className='k-ask-div' />
+
+        <button className='k-voice' type='button' onClick={() => openAssistant({ voice: true })}>
+          <span className='k-voice-ic'>
+            <Icon name='mic' size={44} />
+          </span>
+          <span>
+            <strong>{u('k_voice')}</strong>
+            <small>{u('k_voice_d')}</small>
+          </span>
+        </button>
+      </form>
 
       <h2 className='k-h2'>{u('k_topics')}</h2>
       {situations.kind !== 'ok' ? (

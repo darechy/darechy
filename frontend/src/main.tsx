@@ -7,6 +7,7 @@ import "./brand.css";
 import "./lang.css";
 import "./polish.css";
 import "./layout.css";
+import "./kiosk.css";
 
 createRoot(document.getElementById("root")!).render(
   <StrictMode>
