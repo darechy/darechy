@@ -6,6 +6,7 @@ import "./index.css";
 import "./brand.css";
 import "./lang.css";
 import "./polish.css";
+import "./layout.css";
 
 createRoot(document.getElementById("root")!).render(
   <StrictMode>

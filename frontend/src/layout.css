@@ -1,0 +1,56 @@
+/* Компоновка: строка действий услуги и адаптивный слайдер. Подключается после polish.css. */
+
+/* Две кнопки услуги – в одну строку под описанием. */
+.page-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  margin-top: 10px;
+}
+
+.page-actions .btn {
+  min-height: 46px;
+  padding: 0 22px;
+  font-size: 16px;
+}
+
+/* Одна колонка одинаковой ширины на внутренних страницах. */
+.page .page-head,
+.page .facts,
+.page .page-body,
+.page .route {
+  max-width: 880px;
+}
+
+.page-body h2 {
+  font-size: 26px;
+  margin: 32px 0 14px;
+}
+
+.page-body .docs-head h2 {
+  margin-top: 0;
+}
+
+/* Слайдер: три карточки полностью в ряд, остальные прокручиваются. */
+.slider-track .svc {
+  flex: 1 0 calc((100% - 28px) / 3);
+  min-width: 0;
+}
+
+@media (max-width: 900px) {
+  .slider-track .svc {
+    flex: 1 0 calc((100% - 14px) / 2);
+  }
+}
+
+@media (max-width: 560px) {
+  .slider-track .svc {
+    flex: 0 0 88%;
+  }
+}
+
+@media print {
+  .page-actions {
+    display: none;
+  }
+}

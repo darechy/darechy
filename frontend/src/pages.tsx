@@ -331,6 +331,14 @@ function ServiceView({ service }: { service: Service }) {
         <header className='page-head'>
           <h1 className='page-title'>{service.title}</h1>
           <p className='lead'>{service.summary}</p>
+          <div className='page-actions'>
+            <button className='btn btn-primary' type='button' onClick={() => openAssistant({ serviceId: service.id })}>
+              {t('ask_service')}
+            </button>
+            <button className='btn btn-outline' type='button' onClick={() => window.print()}>
+              {t('print')}
+            </button>
+          </div>
         </header>
 
         <dl className='facts'>
@@ -348,66 +356,55 @@ function ServiceView({ service }: { service: Service }) {
           </div>
         </dl>
 
-        <div className='cols'>
-          <section aria-labelledby='docs-h'>
-            <div className='docs-head'>
-              <h2 id='docs-h'>{t('docs')}</h2>
-              <span className='muted'>
-                {count}/{total} {t('collected')}
-              </span>
-            </div>
-            <div className='progress' role='progressbar' aria-valuenow={percent} aria-valuemin={0} aria-valuemax={100}>
-              <span style={{ width: `${percent}%` }} />
-            </div>
-            <ul className='checklist'>
-              {service.checklist.map((row, index) => {
-                const checked = done.includes(index);
-                return (
-                  <li key={index} className={checked ? 'is-done' : ''}>
-                    <label>
-                      <input type='checkbox' checked={checked} onChange={() => toggle(index)} />
-                      <span className='box' aria-hidden='true' />
-                      <span>
-                        <strong>{clean(row.item)}</strong>
-                        <small>{clean(row.where)}</small>
-                      </span>
-                    </label>
-                  </li>
-                );
-              })}
-            </ul>
-
-            <h2>{t('sources')}</h2>
-            <ul className='sources'>
-              {service.sources.map((source, index) => (
-                <li key={index}>
-                  <span className='src-ic'>
-                    <Icon name='doc' size={20} />
-                  </span>
-                  <div>
-                    {source.url ? (
-                      <a href={source.url} target='_blank' rel='noreferrer'>
-                        {clean(source.title)} ↗
-                      </a>
-                    ) : (
-                      <span className='src-title'>{clean(source.title)}</span>
-                    )}
-                    {source.point && <small>{clean(source.point)}</small>}
-                  </div>
+        <section className='page-body' aria-labelledby='docs-h'>
+          <div className='docs-head'>
+            <h2 id='docs-h'>{t('docs')}</h2>
+            <span className='muted'>
+              {count}/{total} {t('collected')}
+            </span>
+          </div>
+          <div className='progress' role='progressbar' aria-valuenow={percent} aria-valuemin={0} aria-valuemax={100}>
+            <span style={{ width: `${percent}%` }} />
+          </div>
+          <ul className='checklist'>
+            {service.checklist.map((row, index) => {
+              const checked = done.includes(index);
+              return (
+                <li key={index} className={checked ? 'is-done' : ''}>
+                  <label>
+                    <input type='checkbox' checked={checked} onChange={() => toggle(index)} />
+                    <span className='box' aria-hidden='true' />
+                    <span>
+                      <strong>{clean(row.item)}</strong>
+                      <small>{clean(row.where)}</small>
+                    </span>
+                  </label>
                 </li>
-              ))}
-            </ul>
-          </section>
+              );
+            })}
+          </ul>
 
-          <aside className='aside'>
-            <button className='btn btn-primary' type='button' onClick={() => openAssistant({ serviceId: service.id })}>
-              {t('ask_service')}
-            </button>
-            <button className='btn btn-outline' type='button' onClick={() => window.print()}>
-              {t('print')}
-            </button>
-          </aside>
-        </div>
+          <h2>{t('sources')}</h2>
+          <ul className='sources'>
+            {service.sources.map((source, index) => (
+              <li key={index}>
+                <span className='src-ic'>
+                  <Icon name='doc' size={20} />
+                </span>
+                <div>
+                  {source.url ? (
+                    <a href={source.url} target='_blank' rel='noreferrer'>
+                      {clean(source.title)} ↗
+                    </a>
+                  ) : (
+                    <span className='src-title'>{clean(source.title)}</span>
+                  )}
+                  {source.point && <small>{clean(source.point)}</small>}
+                </div>
+              </li>
+            ))}
+          </ul>
+        </section>
       </article>
     </>
   );
