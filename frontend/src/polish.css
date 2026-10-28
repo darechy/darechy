@@ -1,4 +1,4 @@
-/* Доводка: hover кнопок, микрофон, навигация назад, карточка помощи. Подключается последним. */
+/* Доводка: hover кнопок, микрофон, полоса «Главная», маршрут. Подключается последним. */
 
 :root {
   --ease-soft: cubic-bezier(0.22, 0.61, 0.36, 1);
@@ -98,68 +98,149 @@
   animation: mic-pulse 1.6s ease-out infinite;
 }
 
-/* Ссылка «Главная»: кнопка-плашка со стрелкой, стрелка сдвигается при наведении. */
-.crumbs {
-  align-items: center;
+/* ---------- Полоса «Главная» под шапкой ---------- */
+
+.backbar {
+  background: #e9eefb;
 }
 
-.crumbs a.back-link {
+.backbar-row {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  min-height: 60px;
+}
+
+.backbar-link {
   display: inline-flex;
   align-items: center;
-  gap: 8px;
-  padding: 9px 16px 9px 12px;
-  background: #ffffff;
-  border: 1px solid rgba(37, 99, 235, 0.28);
-  border-radius: 2px;
-  color: var(--primary);
-  font-size: 15px;
+  gap: 12px;
+  color: var(--ink);
+  font-size: 16px;
   font-weight: 700;
   text-decoration: none;
-  box-shadow: 0 2px 8px rgba(35, 56, 131, 0.06);
-  transition:
-    background-color 0.35s var(--ease-soft),
-    border-color 0.35s var(--ease-soft),
-    box-shadow 0.5s var(--ease-soft),
-    transform 0.35s var(--ease-soft);
+  transition: color 0.35s var(--ease-soft);
 }
 
-.crumbs a.back-link svg {
-  transition: transform 0.4s var(--ease-soft);
-}
-
-.crumbs a.back-link:hover {
-  background: #eef3ff;
-  border-color: var(--primary);
-  box-shadow: 0 8px 20px rgba(37, 99, 235, 0.16);
-  transform: translateY(-1px);
-}
-
-.crumbs a.back-link:hover svg {
-  transform: translateX(-4px);
-}
-
-/* Карточка «Остались вопросы?» рядом с маршрутом. */
-.help-card {
+.backbar-ic {
   display: grid;
-  gap: 10px;
-  padding: 20px;
+  place-items: center;
+  width: 38px;
+  height: 38px;
+  border-radius: 50%;
+  color: #ffffff;
+  background: linear-gradient(135deg, #2563eb, #5a4bf2);
+  box-shadow: 0 4px 12px rgba(37, 99, 235, 0.3);
+  transition:
+    transform 0.4s var(--ease-soft),
+    box-shadow 0.5s var(--ease-soft);
+}
+
+.backbar-link:hover {
+  color: var(--primary);
+}
+
+.backbar-link:hover .backbar-ic {
+  transform: translateX(-4px);
+  box-shadow: 0 8px 20px rgba(90, 75, 242, 0.4);
+}
+
+.backbar-trail {
+  display: inline-flex;
+  align-items: center;
+  gap: 14px;
+  color: var(--ink-2);
+  font-size: 15px;
+  text-decoration: none;
+}
+
+.backbar-trail::before {
+  content: '/';
+  color: rgba(35, 56, 131, 0.3);
+}
+
+a.backbar-trail:hover {
+  color: var(--primary);
+}
+
+/* ---------- Маршрут: узлы, линия, финальный шаг «?» ---------- */
+
+.route {
+  max-width: 880px;
+  gap: 14px;
+}
+
+.route li {
+  position: relative;
+  grid-template-columns: 44px 1fr;
+  gap: 16px;
+}
+
+.route li:not(:last-child)::before {
+  content: '';
+  position: absolute;
+  left: 17px;
+  top: 42px;
+  bottom: -14px;
+  border-left: 2px dashed rgba(37, 99, 235, 0.35);
+}
+
+.route-n {
+  display: grid;
+  place-items: center;
+  width: 36px;
+  height: 36px;
+  border-radius: 50%;
   background: #ffffff;
-  border: 1px solid var(--line);
+  border: 1.5px solid var(--primary);
+  color: var(--primary);
+  font-family: var(--sans);
+  font-size: 16px;
+  font-weight: 700;
+}
+
+.route-end .route-n {
+  border: 0;
+  color: #ffffff;
+  background: linear-gradient(135deg, #2563eb, #5a4bf2);
+  box-shadow: 0 4px 12px rgba(37, 99, 235, 0.3);
+}
+
+.route-ask {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 20px;
+  padding: 20px 22px;
+  background: #ffffff;
+  border: 1.5px dashed rgba(37, 99, 235, 0.45);
   border-radius: 2px;
 }
 
-.help-card h3 {
+.route-ask h3 {
   font-size: 20px;
 }
 
-.help-card p {
+.route-ask p {
+  margin-top: 2px;
   color: var(--ink-2);
   font-size: 14px;
 }
 
-.help-card .btn {
-  width: 100%;
-  margin-top: 6px;
+.route-ask .btn {
+  flex: none;
+  width: 220px;
+}
+
+@media (max-width: 640px) {
+  .route-ask {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .route-ask .btn {
+    width: 100%;
+  }
 }
 
 @media (prefers-reduced-motion: reduce) {

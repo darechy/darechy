@@ -11,13 +11,28 @@ import { useU } from './ui';
 // В данных бэкенда бывают заглушки с «❗»: убираем знак, текст оставляем.
 const clean = (s: string): string => s.replace(/^[\s\u2757\u203C\u26A0\uFE0F]+/, '');
 
-function BackLink() {
+// Полоса под шапкой: большая круглая кнопка «Главная» и путь до текущей страницы.
+function BackBar({ trail }: { trail?: { href?: string; label: string } }) {
   const { t } = useT();
   return (
-    <a className='back-link' href='#/'>
-      <Icon name='back' size={18} />
-      {t('home')}
-    </a>
+    <div className='backbar'>
+      <div className='wrap backbar-row'>
+        <a className='backbar-link' href='#/'>
+          <span className='backbar-ic'>
+            <Icon name='back' size={20} />
+          </span>
+          <span>{t('home')}</span>
+        </a>
+        {trail &&
+          (trail.href ? (
+            <a className='backbar-trail' href={trail.href}>
+              {trail.label}
+            </a>
+          ) : (
+            <span className='backbar-trail'>{trail.label}</span>
+          ))}
+      </div>
+    </div>
   );
 }
 
@@ -231,15 +246,13 @@ function useChecked(id: string) {
 export function NotFound() {
   const { t } = useT();
   return (
-    <section className='wrap section'>
-      <h1 className='page-title'>{t('notfound')}</h1>
-      <p className='muted'>{t('notfound_d')}</p>
-      <p>
-        <a className='btn btn-outline' href='#/'>
-          {t('home')}
-        </a>
-      </p>
-    </section>
+    <>
+      <BackBar />
+      <section className='wrap section'>
+        <h1 className='page-title'>{t('notfound')}</h1>
+        <p className='muted'>{t('notfound_d')}</p>
+      </section>
+    </>
   );
 }
 
@@ -254,93 +267,88 @@ function ServiceView({ service }: { service: Service }) {
   const parentMeta = parent ? SITUATIONS.find((m) => m.id === parent.id) : undefined;
 
   return (
-    <article className='wrap section page'>
-      <nav className='crumbs' aria-label='breadcrumbs'>
-        <BackLink />
-        {parent && (
-          <>
-            <span>/</span>
-            <a href={`#/situation/${encodeURIComponent(parent.id)}`}>{parentMeta ? parentMeta[lang].title : parent.title}</a>
-          </>
-        )}
-      </nav>
+    <>
+      <BackBar
+        trail={parent ? { href: `#/situation/${encodeURIComponent(parent.id)}`, label: parentMeta ? parentMeta[lang].title : parent.title } : undefined}
+      />
+      <article className='wrap section page'>
+        <header className='page-head'>
+          <h1 className='page-title'>{service.title}</h1>
+          <p className='lead'>{service.summary}</p>
+        </header>
 
-      <header className='page-head'>
-        <h1 className='page-title'>{service.title}</h1>
-        <p className='lead'>{service.summary}</p>
-      </header>
-
-      <dl className='facts'>
-        <div>
-          <dt>{t('who')}</dt>
-          <dd>{clean(service.who)}</dd>
-        </div>
-        <div>
-          <dt>{t('amount')}</dt>
-          <dd>{clean(service.amount)}</dd>
-        </div>
-        <div>
-          <dt>{t('deadline')}</dt>
-          <dd>{clean(service.deadline)}</dd>
-        </div>
-      </dl>
-
-      <div className='cols'>
-        <section aria-labelledby='docs-h'>
-          <div className='docs-head'>
-            <h2 id='docs-h'>{t('docs')}</h2>
-            <span className='muted'>
-              {count}/{total} {t('collected')}
-            </span>
+        <dl className='facts'>
+          <div>
+            <dt>{t('who')}</dt>
+            <dd>{clean(service.who)}</dd>
           </div>
-          <div className='progress' role='progressbar' aria-valuenow={percent} aria-valuemin={0} aria-valuemax={100}>
-            <span style={{ width: `${percent}%` }} />
+          <div>
+            <dt>{t('amount')}</dt>
+            <dd>{clean(service.amount)}</dd>
           </div>
-          <ul className='checklist'>
-            {service.checklist.map((row, index) => {
-              const checked = done.includes(index);
-              return (
-                <li key={index} className={checked ? 'is-done' : ''}>
-                  <label>
-                    <input type='checkbox' checked={checked} onChange={() => toggle(index)} />
-                    <span className='box' aria-hidden='true' />
-                    <span>
-                      <strong>{clean(row.item)}</strong>
-                      <small>{clean(row.where)}</small>
-                    </span>
-                  </label>
+          <div>
+            <dt>{t('deadline')}</dt>
+            <dd>{clean(service.deadline)}</dd>
+          </div>
+        </dl>
+
+        <div className='cols'>
+          <section aria-labelledby='docs-h'>
+            <div className='docs-head'>
+              <h2 id='docs-h'>{t('docs')}</h2>
+              <span className='muted'>
+                {count}/{total} {t('collected')}
+              </span>
+            </div>
+            <div className='progress' role='progressbar' aria-valuenow={percent} aria-valuemin={0} aria-valuemax={100}>
+              <span style={{ width: `${percent}%` }} />
+            </div>
+            <ul className='checklist'>
+              {service.checklist.map((row, index) => {
+                const checked = done.includes(index);
+                return (
+                  <li key={index} className={checked ? 'is-done' : ''}>
+                    <label>
+                      <input type='checkbox' checked={checked} onChange={() => toggle(index)} />
+                      <span className='box' aria-hidden='true' />
+                      <span>
+                        <strong>{clean(row.item)}</strong>
+                        <small>{clean(row.where)}</small>
+                      </span>
+                    </label>
+                  </li>
+                );
+              })}
+            </ul>
+
+            <h2>{t('sources')}</h2>
+            <ul className='sources'>
+              {service.sources.map((source, index) => (
+                <li key={index}>
+                  {source.url ? (
+                    <a href={source.url} target='_blank' rel='noreferrer'>
+                      {source.title} ↗
+                    </a>
+                  ) : (
+                    <span>{source.title}</span>
+                  )}
+                  {source.point && <small>{source.point}</small>}
                 </li>
-              );
-            })}
-          </ul>
+              ))}
+            </ul>
+          </section>
 
-          <h2>{t('sources')}</h2>
-          <ul className='sources'>
-            {service.sources.map((source, index) => (
-              <li key={index}>
-                {source.url ? (
-                  <a href={source.url} target='_blank' rel='noreferrer'>
-                    {source.title} ↗
-                  </a>
-                ) : (
-                  <span>{source.title}</span>
-                )}
-                {source.point && <small>{source.point}</small>}
-              </li>
-            ))}
-          </ul>
-        </section>
-
-        <aside className='aside'>
-          <button className='btn btn-primary btn-lg' type='button' onClick={() => openAssistant({ serviceId: service.id })}>
-            {t('ask_service')}
-          </button>
-          <button className='btn btn-outline' type='button' onClick={() => window.print()}>
-            {t('print')}
-          </button>
-        </aside>
-      </div>
-    </article>
+          <aside className='aside'>
+            <button className='btn btn-primary btn-lg' type='button' onClick={() => openAssistant({ serviceId: service.id })}>
+              {t('ask_service')}
+            </button>
+            <button className='btn btn-outline' type='button' onClick={() => window.print()}>
+              {t('print')}
+            </button>
+          </aside>
+        </div>
+      </article>
+    </>
   );
 }
 
@@ -381,17 +389,15 @@ export function SituationPage({ id }: { id: string }) {
     .filter((s): s is Service => s !== undefined);
 
   return (
-    <article className='wrap section page'>
-      <nav className='crumbs' aria-label='breadcrumbs'>
-        <BackLink />
-      </nav>
-      <header className='page-head'>
-        <p className='eyebrow'>{t('route')}</p>
-        <h1 className='page-title'>{title}</h1>
-        {meta && <p className='lead'>{meta[lang].hint}</p>}
-      </header>
+    <>
+      <BackBar trail={{ label: title }} />
+      <article className='wrap section page'>
+        <header className='page-head'>
+          <p className='eyebrow'>{t('route')}</p>
+          <h1 className='page-title'>{title}</h1>
+          {meta && <p className='lead'>{meta[lang].hint}</p>}
+        </header>
 
-      <div className='cols'>
         <ol className='route'>
           {steps.map((service, index) => (
             <li key={service.id}>
@@ -411,18 +417,20 @@ export function SituationPage({ id }: { id: string }) {
               </div>
             </li>
           ))}
+          <li className='route-end'>
+            <span className='route-n'>?</span>
+            <div className='route-ask'>
+              <div>
+                <h3>{u('s_help_t')}</h3>
+                <p>{u('s_help_d')}</p>
+              </div>
+              <button className='btn btn-primary' type='button' onClick={() => openAssistant({ text: title })}>
+                {t('nav_ask')}
+              </button>
+            </div>
+          </li>
         </ol>
-
-        <aside className='aside'>
-          <div className='help-card'>
-            <h3>{u('s_help_t')}</h3>
-            <p>{u('s_help_d')}</p>
-            <button className='btn btn-primary' type='button' onClick={() => openAssistant({ text: title })}>
-              {t('nav_ask')}
-            </button>
-          </div>
-        </aside>
-      </div>
-    </article>
+      </article>
+    </>
   );
 }
