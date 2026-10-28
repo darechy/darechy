@@ -139,7 +139,7 @@ function Shell() {
   return (
     <AppCtx.Provider value={ctx}>
       {KIOSK ? (
-        <KioskApp route={route} />
+        <KioskApp key={session} route={route} />
       ) : (
         <>
           <a className='skip' href='#main' onClick={(e) => { e.preventDefault(); document.getElementById('main')?.focus(); }}>
