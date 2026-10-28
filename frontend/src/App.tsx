@@ -1,9 +1,10 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 
 import Assistant, { type AssistantRequest } from './Assistant';
-import { fetchServices, fetchSituations } from './api';
+import { fetchServices, fetchSituations, type Service } from './api';
+import { localizeService } from './catalog_be';
 import { AppCtx, type OpenAssistantOptions } from './context';
-import { useAsync } from './hooks';
+import { useAsync, type AsyncState } from './hooks';
 import { LangCtx, useT, type Lang } from './i18n';
 import { BrandMark } from './icons';
 import { KioskApp } from './Kiosk';
@@ -29,12 +30,18 @@ function Shell() {
   const { t, lang, setLang } = useT();
   const u = useU();
   const { route, hash } = useRoute();
-  const services = useAsync(fetchServices);
+  const rawServices = useAsync(fetchServices);
   const situations = useAsync(fetchSituations);
   const [open, setOpen] = useState(false);
   const [request, setRequest] = useState<AssistantRequest>(null);
   const [session, setSession] = useState(0);
   const [warn, setWarn] = useState(false);
+
+  // Каталог услуг с бэкенда – по-русски; в БЕЛ подменяем тексты по id.
+  const services = useMemo<AsyncState<Service[]>>(
+    () => (rawServices.kind === 'ok' ? { kind: 'ok', data: rawServices.data.map((s) => localizeService(s, lang)) } : rawServices),
+    [rawServices, lang],
+  );
 
   const openAssistant = useCallback((options?: OpenAssistantOptions) => {
     setRequest((prev) => ({
