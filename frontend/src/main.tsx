@@ -13,6 +13,7 @@ import "./kiosk-chat.css";
 import "./kiosk-fix.css";
 import "./kiosk-bar.css";
 import "./mobile.css";
+import "./input-fit.css";
 
 createRoot(document.getElementById("root")!).render(
   <StrictMode>

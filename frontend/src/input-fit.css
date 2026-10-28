@@ -1,0 +1,13 @@
+/* Если подсказка (placeholder) не помещается в поле, она заканчивается многоточием, а не обрывается. */
+
+input {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+input::placeholder {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
