@@ -6,8 +6,9 @@ import { AppCtx } from './context';
 import type { AsyncState } from './hooks';
 import { EXAMPLES, SITUATIONS, useT } from './i18n';
 import { Icon, situationIcon } from './icons';
+import { useU } from './ui';
 
-// В данных бэкенда бывают заглушки с «❗» — убираем знак, текст оставляем.
+// В данных бэкенда бывают заглушки с «❗»: убираем знак, текст оставляем.
 const clean = (s: string): string => s.replace(/^[\s\u2757\u203C\u26A0\uFE0F]+/, '');
 
 export function Status({ state }: { state: AsyncState<unknown> }) {
@@ -38,6 +39,7 @@ export function useSituationCards() {
 
 export function Home() {
   const { t, lang } = useT();
+  const u = useU();
   const { services, openAssistant } = useContext(AppCtx);
   const cards = useSituationCards();
   const [question, setQuestion] = useState('');
@@ -90,14 +92,14 @@ export function Home() {
           <aside className='principles' aria-label={t('principles')}>
             <h2>{t('principles')}</h2>
             <ul>
-              {[1, 2, 3].map((n) => (
+              {[1, 2, 3, 4, 5].map((n) => (
                 <li key={n}>
                   <span className='check'>
                     <Icon name='check' size={18} />
                   </span>
                   <div>
-                    <h3>{t(`p${n}_t`)}</h3>
-                    <p>{t(`p${n}_d`)}</p>
+                    <h3>{n > 3 ? u(`p${n}_t`) : t(`p${n}_t`)}</h3>
+                    <p>{n > 3 ? u(`p${n}_d`) : t(`p${n}_d`)}</p>
                   </div>
                 </li>
               ))}
@@ -209,7 +211,7 @@ function useChecked(id: string) {
       try {
         localStorage.setItem(key, JSON.stringify(next));
       } catch {
-        // приватный режим — просто не сохраняем
+        // приватный режим: просто не сохраняем
       }
       return next;
     });

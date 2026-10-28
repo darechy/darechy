@@ -1,4 +1,4 @@
-/* Плавная смена языка + одинаковая высота переключателя и кнопки ассистента. */
+/* Плавная смена языка, высота переключателя, поле вопроса и блок принципов. */
 
 main,
 .k-main,
@@ -27,7 +27,6 @@ html.lang-out .k-actions .k-btn {
   filter: blur(2px);
 }
 
-/* Одинаковая высота: переключатель языка и «Спросить ассистента». */
 .nav .lang {
   height: 46px;
   align-items: stretch;
@@ -43,6 +42,48 @@ html.lang-out .k-actions .k-btn {
   height: 46px;
   padding-top: 0;
   padding-bottom: 0;
+}
+
+/* Поле вопроса на главной: кнопка впритык, без отступов и скруглений. */
+.askbox-row {
+  display: flex;
+  align-items: stretch;
+  gap: 0;
+  padding: 0;
+  border: 1px solid var(--ink);
+  border-radius: 0;
+  background: #ffffff;
+  overflow: hidden;
+  box-shadow: none;
+}
+
+.askbox-row input {
+  border-radius: 0;
+}
+
+.askbox-row .btn {
+  align-self: stretch;
+  margin: 0;
+  border-radius: 0;
+  border: 0;
+  padding-left: 28px;
+  padding-right: 28px;
+}
+
+.askbox-row:focus-within {
+  border-color: var(--primary);
+}
+
+/* Блок «На чём это стоит»: пункты равномерно занимают всю высоту карточки. */
+.principles {
+  display: flex;
+  flex-direction: column;
+}
+
+.principles ul {
+  flex: 1;
+  justify-content: space-between;
+  gap: 18px;
 }
 
 @media (prefers-reduced-motion: reduce) {
