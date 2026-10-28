@@ -20,18 +20,7 @@ export type IconName = keyof typeof PATHS;
 
 export function Icon({ name, size = 24 }: { name: IconName; size?: number }) {
   return (
-    <svg
-      viewBox='0 0 24 24'
-      width={size}
-      height={size}
-      fill='none'
-      stroke='currentColor'
-      strokeWidth={1.9}
-      strokeLinecap='round'
-      strokeLinejoin='round'
-      aria-hidden='true'
-      focusable='false'
-    >
+    <svg viewBox='0 0 24 24' width={size} height={size} fill='none' stroke='currentColor' strokeWidth={1.9} strokeLinecap='round' strokeLinejoin='round' aria-hidden='true' focusable='false'>
       <path d={PATHS[name]} />
     </svg>
   );
@@ -40,8 +29,10 @@ export function Icon({ name, size = 24 }: { name: IconName; size?: number }) {
 export function BrandMark({ size = 30 }: { size?: number }) {
   return (
     <svg viewBox='0 0 32 32' width={size} height={size} aria-hidden='true' focusable='false'>
-      <path d='M16 2l14 14-14 14L2 16z' fill='var(--primary)' />
-      <path d='M16 9l7 7-7 7-7-7z' fill='var(--bg)' />
+      <path fill='var(--primary)' d='M5 2h14.2L27 9.8V30H5z' />
+      <path fill='var(--bg)' d='M19.2 2v7.8H27' />
+      <path d='M10 15.5h12' stroke='var(--mark)' strokeWidth='2.2' strokeLinecap='square' />
+      <path d='M10 20h9M10 24h6' stroke='var(--bg)' strokeWidth='1.7' strokeLinecap='square' />
     </svg>
   );
 }
