@@ -4,20 +4,21 @@ import type { FormEvent } from 'react';
 import type { Service } from './api';
 import { AppCtx } from './context';
 import { EXAMPLES, SITUATIONS, useT, type Lang } from './i18n';
-import { BrandMark, Icon, situationIcon } from './icons';
-import { Status, useSituationCards } from './pages';
+import { BrandMark, Icon } from './icons';
+import { Status } from './pages';
 import type { Route } from './router';
 import { speak, stopSpeaking } from './speech';
 import { useU } from './ui';
 
 const clean = (s: string): string => s.replace(/^[\s\u2757\u203C\u26A0\uFE0F]+/, '');
 
+// Главная киоска: карточка вопроса и сразу все услуги в столбик, самая новая первой.
 function KioskHome() {
   const u = useU();
   const { t, lang } = useT();
-  const { openAssistant, situations } = useContext(AppCtx);
-  const cards = useSituationCards().filter((c) => c.active);
+  const { openAssistant, services } = useContext(AppCtx);
   const [question, setQuestion] = useState('');
+  const list = services.kind === 'ok' ? [...services.data].reverse() : [];
 
   const submit = (event: FormEvent) => {
     event.preventDefault();
@@ -65,41 +66,11 @@ function KioskHome() {
         </button>
       </form>
 
-      <h2 className='k-h2'>{u('k_topics')}</h2>
-      {situations.kind !== 'ok' ? (
-        <Status state={situations} />
-      ) : (
-        <div className='k-grid'>
-          {cards.map((card) => (
-            <a key={card.id} className='k-tile' href={`#/situation/${encodeURIComponent(card.id)}`}>
-              <span className='k-tile-ic'>
-                <Icon name={situationIcon(card.id)} size={44} />
-              </span>
-              <span>{card.title}</span>
-            </a>
-          ))}
-          <a className='k-tile' href='#/services'>
-            <span className='k-tile-ic'>
-              <Icon name='list' size={44} />
-            </span>
-            <span>{u('k_all')}</span>
-          </a>
-        </div>
-      )}
-    </>
-  );
-}
-
-function KioskServices() {
-  const { t } = useT();
-  const { services } = useContext(AppCtx);
-  return (
-    <>
-      <h1 className='k-title'>{t('svc_title')}</h1>
+      <h2 className='k-h2'>{t('svc_title')}</h2>
       <Status state={services} />
       {services.kind === 'ok' && (
-        <div className='k-steps'>
-          {services.data.map((service) => (
+        <div className='k-list-services'>
+          {list.map((service) => (
             <a key={service.id} className='k-step' href={`#/service/${encodeURIComponent(service.id)}`}>
               <span className='k-step-txt'>
                 <strong>{service.title}</strong>
@@ -249,7 +220,7 @@ function KioskNotFound() {
 export function KioskApp({ route }: { route: Route }) {
   const { lang, setLang } = useT();
   const u = useU();
-  const atHome = route.name === 'home' && route.section !== 'services';
+  const atHome = route.name === 'home';
   return (
     <div className='k'>
       <header className='k-bar'>
@@ -278,8 +249,7 @@ export function KioskApp({ route }: { route: Route }) {
       </header>
 
       <main className='k-main'>
-        {route.name === 'home' && route.section === 'services' && <KioskServices />}
-        {route.name === 'home' && route.section !== 'services' && <KioskHome />}
+        {route.name === 'home' && <KioskHome />}
         {route.name === 'situation' && <KioskSituation id={route.id} />}
         {route.name === 'service' && <KioskService id={route.id} />}
         {route.name === 'notfound' && <KioskNotFound />}
