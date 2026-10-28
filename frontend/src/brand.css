@@ -1,4 +1,4 @@
-/* Палитра из logo.svg. Белорусская линия — только под шапкой. */
+/* Палитра из logo.svg. */
 
 :root {
   --bg: #f2f4fa;
@@ -13,26 +13,48 @@
   --ok: #1c4a3a;
   --warn-bg: #f4efe4;
   --warn: #6d5428;
+  --rule: #233883;
+}
+
+.hdr,
+.k-bar {
+  border-bottom: 3px solid var(--rule);
+}
+
+.ftr {
+  border-top: 3px solid var(--rule);
+}
+
+.hdr::after,
+.k-bar::after,
+.ftr::before {
+  display: none;
 }
 
 .btn-primary,
 .k-btn-primary,
 .k-voice,
 .voice-btn {
-  background: linear-gradient(120deg, #2563eb, #5a4bf2);
+  background: linear-gradient(120deg, #2563eb 0%, #5a4bf2 55%, #2563eb 100%);
+  background-size: 180% 180%;
+  background-position: 0% 50%;
   border-color: transparent;
   color: #fff;
+  transition: background-position 0.45s ease, filter 0.45s ease;
 }
 
-.btn-primary:hover:not(:disabled) {
-  background: #1d4ed8;
+.btn-primary:hover:not(:disabled),
+.k-btn-primary:hover,
+.k-voice:hover,
+.voice-btn:hover:not(:disabled) {
+  background: linear-gradient(120deg, #2563eb 0%, #5a4bf2 55%, #2563eb 100%);
+  background-size: 180% 180%;
+  background-position: 100% 50%;
 }
 
-.hdr::after,
-.k-bar::after,
-.ftr::before {
-  height: 3px;
-  background: linear-gradient(#c8102e, #c8102e) 0 0 / 100% 1px no-repeat, #1c4a3a;
+.nav .nav-ask {
+  width: 220px;
+  min-width: 220px;
 }
 
 .brand-name {
@@ -44,7 +66,7 @@
 
 .brand-logo {
   display: block;
-  height: 42px;
+  height: 44px;
   width: auto;
 }
 
@@ -54,4 +76,15 @@
 
 .k-brand .brand-logo {
   height: 56px;
+}
+
+.asst-empty,
+.asst-empty p,
+.msg,
+.msg-text {
+  text-align: center;
+}
+
+.asst-empty .chips {
+  justify-content: center;
 }
