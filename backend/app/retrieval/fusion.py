@@ -72,17 +72,22 @@ def fuse_rankings(
     top_k: int,
     margin: float = DEFAULT_DENSE_MARGIN,
 ) -> list[RetrievedChunk]:
-    """Итоговое ранжирование: уверенный dense важнее фьюжна, иначе — RRF."""
+    """Итоговое ранжирование: уверенный dense важнее фьюжна, иначе — RRF.
+
+    `top_k <= 0` — без ограничения (вернуть всё). Раньше при `top_k=0` ветки
+    «одно плечо пустое» возвращали пустой список, а основная ветка — всё:
+    противоречие, на котором спотыкался бенчмарк.
+    """
+    limit = top_k if top_k > 0 else None
+
     if not dense:
-        return bm25[:top_k]
+        return bm25 if limit is None else bm25[:limit]
     if not bm25:
-        return dense[:top_k]
+        return dense if limit is None else dense[:limit]
 
     if dense_is_confident(dense, margin):
         chosen = dense
     else:
         chosen = rrf_fuse(bm25, dense)
 
-    if top_k > 0:
-        return chosen[:top_k]
-    return chosen
+    return chosen if limit is None else chosen[:limit]

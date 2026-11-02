@@ -28,7 +28,10 @@ class Chunk(BaseModel):
     chunk_id: str
     location: ChunkLocation
     text: str
-    status: str = "проверен"  # индексируем только «проверен»
+    status: str = "проверен"  # по умолчанию индексируем только «проверен»
+    # Человекочитаемое имя чанка («Статья 11. Пособие в связи с рождением
+    # ребенка — пункт 2»): нужно админке и страницам услуг.
+    title: str | None = None
     # Заполняется на этапе индексации:
     doc_title: str | None = None
     doc_number: str | None = None

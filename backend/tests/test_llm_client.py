@@ -103,3 +103,34 @@ def test_embed_batch_rejects_short_response(monkeypatch) -> None:
         lambda url, json=None, timeout=None: _Resp({"embeddings": [[0.1]]}),
     )
     assert _client().embed_batch(["a", "b"]) is None
+
+
+# --- маркеры ссылок в ответе модели -----------------------------------------
+# Регресс на реальный баг: id пунктов содержат кириллицу («п-1» из «пункт 1»),
+# а класс символов в регекспе её не включал. Маркеры терялись молча, и цитата
+# подставлялась «лучшим чанком» — то есть не та статья, о которой модель
+# говорила. Тесты фиксируют, что кириллица в маркерах читается.
+
+
+def test_markers_with_cyrillic_are_extracted() -> None:
+    from app.chat.orchestrator import _extract_markers
+
+    assert _extract_markers("Пособие [7-Z_st-12-п-1] лицам.") == ["7-Z_st-12-п-1"]
+
+
+def test_multiple_markers_and_no_markers() -> None:
+    from app.chat.orchestrator import _extract_markers
+
+    assert _extract_markers("[7-Z_st-11-п-2] и [7-Z_st-13-п-9]") == [
+        "7-Z_st-11-п-2",
+        "7-Z_st-13-п-9",
+    ]
+    assert _extract_markers("ответ без ссылок") == []
+
+
+def test_markers_are_stripped_from_user_visible_answer() -> None:
+    from app.chat.orchestrator import _strip_markers
+
+    cleaned = _strip_markers("Пособие назначается [7-Z_st-12-п-1] лицам.")
+    assert "[" not in cleaned and "7-Z" not in cleaned
+    assert "Пособие назначается" in cleaned

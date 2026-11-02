@@ -11,6 +11,7 @@
 import logging
 import re
 import time
+from typing import TYPE_CHECKING
 
 from app.chat.router import ServiceRouter
 from app.chat.sessions import SessionMemory
@@ -18,6 +19,9 @@ from app.core.config import Settings
 from app.llm.client import LlmClient
 from app.models.schemas import ChatRequest, ChatResponse, Citation
 from app.retrieval.store import ChunkStore, tokenize
+
+if TYPE_CHECKING:  # импорт только для аннотаций: taught.py сам импортирует схемы
+    from app.chat.taught import TaughtStore
 
 logger = logging.getLogger(__name__)
 
@@ -28,7 +32,10 @@ REFUSAL_TEMPLATE = (
     "обратитесь в подразделение по труду, занятости и социальной защите."
 )
 
-_MARK_RE = re.compile(r"\[(?P<ids>[a-zA-Z0-9_\-,\s]+)\]")
+# Маркеры вида [7-Z_st-12-п-1]. Кириллица обязательна: id пунктов собираются
+# из «пункт N» → «п-1», и без \u0400-\u04FF маркеры молча терялись — модель
+# ставила ссылку, а цитата подставлялась «лучшим чанком», то есть не та.
+_MARK_RE = re.compile(r"\[(?P<ids>[a-zA-Z0-9_\-\u0400-\u04FF,\s]+)\]")
 _MAX_QUOTE_CHARS = 600
 # Бюджет фрагмента, который уходит модели. 1800 символов ≈ 600 токенов на статью:
 # шесть статей ≈ 3 600 токенов вместо ~9 400 — это и есть лечение галлюцинаций.
@@ -213,16 +220,34 @@ class Orchestrator:
         llm: LlmClient,
         router: ServiceRouter | None = None,
         sessions: SessionMemory | None = None,
+        taught: "TaughtStore | None" = None,
     ) -> None:
         self.settings = settings
         self.store = store
         self.llm = llm
+        # Слой «доучивания»: подтверждённые людьми ответы поверх корпуса.
+        self.taught = taught
         self.router = router
         self.sessions = sessions if sessions is not None else SessionMemory()
 
     def answer(self, request: ChatRequest) -> ChatResponse:
         started = time.perf_counter()
         history = self.sessions.history(request.session_id)
+        suggested = self.router.route(request.message) if self.router else []
+
+        # Слой доучивания: ответ, подтверждённый администратором, важнее
+        # генерации. Отвечает мгновенно и не зависит от качества модели, но
+        # цитаты всё равно берутся из корпуса — не из текста администратора.
+        taught = self._taught_answer(request)
+        if taught is not None:
+            self._remember(request, taught.answer)
+            return self._done(
+                taught.answer,
+                taught.citations,
+                suggested=suggested,
+                started=started,
+                source="taught",
+            )
 
         # Уточняющие вопросы («а какие документы?») теряют смысл без контекста:
         # в поисковый запрос подмешиваем предыдущую реплику пользователя.
@@ -245,7 +270,6 @@ class Orchestrator:
             top_k=request.top_k,
             score_threshold=self.settings.retrieval_score_threshold,
         )
-        suggested = self.router.route(request.message) if self.router else []
         if not hits:
             self._remember(request, None)
             return self._done(REFUSAL_TEMPLATE, [], refusal=True,
@@ -310,6 +334,29 @@ class Orchestrator:
         )
 
     # --- внутреннее ---------------------------------------------------------
+
+    def _taught_answer(self, request: ChatRequest) -> ChatResponse | None:
+        """Проверяет слой доучивания. None — выученного ответа нет, идём искать."""
+        if self.taught is None:
+            return None
+        match = self.taught.match(request.message, service_id=request.service_id)
+        if match is None:
+            return None
+
+        chunks_by_id = {
+            chunk_id: hit.chunk
+            for chunk_id in (source.chunk_id for source in match.taught.sources)
+            if (hit := self.store.get(chunk_id)) is not None
+        }
+        citations = self.taught.citations_for(match.taught, chunks_by_id)
+        if not citations:
+            # Источники выученного ответа исчезли из корпуса: отдавать ответ
+            # без действующей нормы нельзя — пусть работает обычный путь.
+            logger.warning(
+                "Выученный ответ %s пропущен: источники не найдены в корпусе", match.taught.id
+            )
+            return None
+        return ChatResponse(answer=match.taught.answer, citations=citations)
 
     def _remember(self, request: ChatRequest, assistant_answer: str | None) -> None:
         """Запоминает реплику пользователя и (если был) ответ ассистента."""

@@ -18,6 +18,7 @@
 from __future__ import annotations
 
 import argparse
+import re
 import sys
 from dataclasses import dataclass
 from pathlib import Path
@@ -30,6 +31,7 @@ from app.kb.ingest import collect_chunks, load_curated  # noqa: E402
 from app.kb.models import RetrievedChunk  # noqa: E402
 from app.llm.client import LlmClient  # noqa: E402
 from app.retrieval.fusion import fuse_rankings  # noqa: E402
+from app.retrieval.grouping import group_by_article  # noqa: E402
 from app.retrieval.store import ChunkStore  # noqa: E402
 
 
@@ -131,11 +133,61 @@ def fuse(
     rrf_k: int = 60,
     dense_weight: float = 1.0,
 ) -> list[str]:
-    """Возвращает chunk_id в порядке убывания релевантности для заданной стратегии."""
+    """Возвращает chunk_id в порядке убывания релевантности для заданной стратегии.
+
+    Стратегии с суффиксом `+group` дополнительно сворачивают пункты в статьи
+    (боевое поведение store.search при нарезанном на пункты корпусе).
+    """
+    group = strategy.endswith("+group")
+    if group:
+        strategy = strategy[: -len("+group")]
     if strategy == "bm25":
-        return [h.chunk.chunk_id for h in bm25]
-    if strategy == "dense":
-        return [h.chunk.chunk_id for h in dense]
+        ranked = bm25
+    elif strategy == "dense":
+        ranked = dense
+    elif strategy in ("rrf", "score"):
+        return _ranked_ids(bm25, dense, strategy, rrf_k, dense_weight, group)
+    elif strategy == "hybrid":
+        return _ranked_ids(bm25, dense, "hybrid", rrf_k, dense_weight, group)
+    else:
+        raise ValueError(f"неизвестная стратегия: {strategy}")
+    if group:
+        ranked = group_by_article(ranked)
+    return [h.chunk.chunk_id for h in ranked]
+
+
+def _ranked_ids(bm25, dense, strategy, rrf_k, dense_weight, group) -> list[str]:
+    from app.retrieval.fusion import fuse_rankings
+
+    if strategy == "hybrid":
+        hits = fuse_rankings(bm25, dense, top_k=0)
+    else:
+        hits = _score_fuse(bm25, dense, strategy, rrf_k, dense_weight)
+    if group:
+        hits = group_by_article(hits)
+    return [h.chunk.chunk_id for h in hits]
+
+
+def _score_fuse(bm25, dense, strategy, rrf_k, dense_weight):
+    from app.kb.models import RetrievedChunk
+
+    scores: dict[str, float] = {}
+    keep: dict[str, RetrievedChunk] = {}
+    if strategy == "rrf":
+        for hits in (bm25, dense):
+            for rank, hit in enumerate(hits):
+                cid = hit.chunk.chunk_id
+                scores[cid] = scores.get(cid, 0.0) + 1 / (rrf_k + rank + 1)
+                keep.setdefault(cid, hit)
+    else:
+        for hits, weight in ((bm25, 1.0), (dense, dense_weight)):
+            norm = _norm({h.chunk.chunk_id: h.score for h in hits})
+            for cid, value in norm.items():
+                scores[cid] = scores.get(cid, 0.0) + value * weight
+        for hit in bm25 + dense:
+            keep.setdefault(hit.chunk.chunk_id, hit)
+    ordered = sorted(scores, key=lambda cid: scores[cid], reverse=True)
+    return [RetrievedChunk(chunk=keep[cid].chunk, score=scores[cid], via=keep[cid].via) for cid in ordered]
 
     scores: dict[str, float] = {}
 
@@ -177,14 +229,35 @@ def fuse(
     return sorted(scores, key=lambda cid: scores[cid], reverse=True)
 
 
+def article_of(chunk_id: str) -> str:
+    """«7-Z_st-11-п-2» → «7-Z_st-11»: сравниваем статью, а не конкретный пункт.
+
+    Корпус нарезан на пункты (требование kb_corpus/README.md), поэтому в индексе
+    лежат `..._st-11_п-2`, а разметка задана статьёй. Сравнение по точному
+    chunk_id давало ложные 0% сразу после разбора на пункты.
+    """
+    match = re.match(r"^(.*_st-\d+)", chunk_id)
+    return match.group(1) if match else chunk_id
+
+
 def evaluate(strategy: str, store: ChunkStore, llm: LlmClient, top_k: int, verbose: bool) -> float:
     hits = 0
     for case in FACT_CASES:
+        if strategy == "production":
+            # Ровно то, что делает боевой код: без своей формулы фьюжна,
+            # иначе цифра в бенчмарке и поведение сервиса расходятся.
+            results = store.search(case.question, llm, top_k=top_k)
+            top1 = results[0].chunk.chunk_id if results else "-"
+            hits += article_of(top1) == case.article
+            if verbose:
+                mark = "OK " if article_of(top1) == case.article else "МИМО"
+                print(f"    {mark} ждали {case.article:12} получили {top1:20} {case.question}")
+            continue
         bm25 = store.search_bm25(case.question, top_k=top_k)
         dense = store.search_dense(case.question, llm, top_k=top_k)
         ranked = fuse(bm25, dense, strategy)
         top1 = ranked[0] if ranked else "-"
-        ok = top1 == case.article
+        ok = article_of(top1) == case.article
         hits += ok
         if verbose:
             mark = "OK " if ok else "МИМО"
@@ -252,12 +325,22 @@ def main() -> None:
     store = ChunkStore(
         qdrant_url=settings.qdrant_url if settings.use_qdrant else None,
         embedding_dim=settings.embedding_dim,
+        # Тот же набор статусов, что у живого сервера: иначе корпус со статусом
+        # «восстановлен» отфильтруется и бенчмарк замерит пустой индекс.
+        allowed_statuses=settings.allowed_statuses,
     )
     chunks = collect_chunks(docs)
     store.rebuild(chunks)
     print(f"корпус: {len(chunks)} чанков, dense доступен: {store.dense_available}\n")
 
-    strategies = ["bm25", "dense", "rrf", "score", "hybrid"]
+    # Пункты ВСЕГДА сворачиваются в статьи: иначе бенчмарк меряет не то, что
+    # делает боевой store.search() — там группировка включена по умолчанию.
+    strategies = [
+        "production",     # боевой store.search() — главная цифра
+        "dense+group",    # для сравнения: одно dense-плечо
+        "bm25+group",
+        "rrf+group",
+    ]
     results: dict[str, float] = {}
     for strategy in strategies:
         if args.verbose:

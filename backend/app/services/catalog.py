@@ -57,5 +57,11 @@ class Catalog:
 
 
 def build_catalog(settings: Settings) -> Catalog:
-    """Фабрика каталога. Неделя 2: здесь появится Postgres-реализация."""
+    """Фабрика каталога. Читает файл, который правит админка (`services.json`).
+
+    Стаб `services_stub.json` остаётся запасным вариантом, но источник истины
+    теперь редактируемый — «добавить услугу» больше не значит «правь код».
+    """
+    if settings.services_file.exists():
+        return Catalog(settings.services_file)
     return Catalog(BACKEND_DIR / "app" / "data" / "services_stub.json")

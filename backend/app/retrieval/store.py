@@ -20,19 +20,21 @@ import httpx
 from app.kb.models import Chunk, RetrievedChunk
 from app.llm.client import LlmClient
 from app.retrieval.fusion import DEFAULT_DENSE_MARGIN, fuse_rankings
+from app.retrieval.grouping import group_by_article
 
 _COLLECTION = "darechy"
 # Qdrant принимает только unsigned int или UUID как id точки — маппим chunk_id.
 _UUID_NS = uuid.UUID("6f1d2a3b-4c5d-4e6f-8a9b-0c1d2e3f4a5b")
 _EMBED_BATCH = 16
 
-# Пороги релевантности = guardrail «нет источника → отказ». Числа с замера:
-# нерелевантный вопрос даёт BM25 = 0.00 и косинус ≤ 0.449, релевантный —
-# BM25 ≥ 3.77 и косинус ≥ 0.633. Пороги стоят в зазоре и смещены к
-# «пропустить релевантное»: ложный отказ на демо заметнее, чем лишний
-# вопрос, случайно попавший по корпусу.
+# Пороги релевантности = guardrail «нет источника → отказ».
+# Числа подобраны свипом (`python -m scripts.tune_gate`) на 14 размеченных
+# вопросах и 7 заведомо внешних. На корпусе из пунктов порог косинуса
+# критичен: при 0.55 точность 71%, при 0.65 — 93% (группировка статей
+# включена). BM25-порог слабо влияет на точность, но держит внешние вопросы:
+# они дают BM25 = 0.00 (нет ни одного общего слова).
 DEFAULT_MIN_BM25 = 1.0
-DEFAULT_MIN_COSINE = 0.55
+DEFAULT_MIN_COSINE = 0.65
 
 _TOKEN_RE = re.compile(r"[\w]+", re.UNICODE)
 
@@ -269,6 +271,7 @@ class ChunkStore:
         dense_margin: float = DEFAULT_DENSE_MARGIN,
         min_bm25: float = DEFAULT_MIN_BM25,
         min_cosine: float = DEFAULT_MIN_COSINE,
+        group_articles: bool = True,
     ) -> list[RetrievedChunk]:
         """Гибрид BM25 + dense с порогом релевантности.
 
@@ -287,6 +290,10 @@ class ChunkStore:
         (косинус ≥ min_cosine). Пустой результат → оркестратор отдаёт отказ.
 
         `score_threshold` оставлен как более грубый фильтр для совместимости.
+
+        `group_articles`: корпус нарезан на пункты, поэтому после ранжирования
+        пункты сворачиваются в статьи (см. `grouping.py`) — иначе короткие
+        пункты теряют полноту поиска (замер: BM25 падал с 9/14 до 0/14).
         """
         bm25_hits = [
             h
@@ -298,4 +305,7 @@ class ChunkStore:
             for h in self.search_dense(query, llm, top_k=top_k * 2)
             if h.score >= max(score_threshold, min_cosine)
         ]
-        return fuse_rankings(bm25_hits, dense_hits, top_k=top_k, margin=dense_margin)
+        fused = fuse_rankings(bm25_hits, dense_hits, top_k=0, margin=dense_margin)
+        if group_articles:
+            return group_by_article(fused)[:top_k]
+        return fused[:top_k]

@@ -4,10 +4,12 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
+from app.api.admin_routes import admin_router
 from app.api.routes import api_router
 from app.bot.telegram import build_bot
 from app.chat.orchestrator import Orchestrator
 from app.chat.router import ServiceRouter
+from app.chat.taught import TaughtStore
 from app.core.config import get_settings
 from app.kb.ingest import collect_chunks, load_curated
 from app.retrieval.store import ChunkStore
@@ -40,14 +42,25 @@ async def lifespan(app: FastAPI):
     docs, errors = load_curated(settings.corpus_dir)
     for error in errors:
         logger.warning("Кривой файл корпуса: %s", error)
-    indexed = store.rebuild(collect_chunks(docs))
+    chunks = collect_chunks(docs)
+    indexed = store.rebuild(chunks)
     logger.info("Индекс корпуса: %d чанков; Qdrant dense: %s", indexed, store.dense_available)
+
+    # Админка работает с теми же объектами, что и API: индекс, корпус, LLM.
+    app.state.store = store
+    app.state.llm = llm
+    app.state.corpus_chunks = chunks
+    app.state.taught = TaughtStore(settings.taught_file, chunks)
+    broken = app.state.taught.unknown_sources()
+    if broken:
+        logger.warning("Выученные ответы со ссылками вне корпуса: %s", broken)
 
     app.state.orchestrator = Orchestrator(
         settings=settings,
         store=store,
         llm=llm,
         router=ServiceRouter(app.state.catalog.all()),
+        taught=app.state.taught,
     )
 
     bot_result = build_bot(settings, app.state.orchestrator, app.state.voice)
@@ -82,6 +95,9 @@ app.add_middleware(
 )
 
 app.include_router(api_router)
+# Админка: правка базы знаний, каталога услуг и доучивание — без изменения кода.
+# Включается только если задан ADMIN_TOKEN.
+app.include_router(admin_router, prefix="/api")
 
 
 @app.get("/health")

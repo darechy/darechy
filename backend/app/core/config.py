@@ -39,13 +39,20 @@ class Settings(BaseSettings):
 
     # RAG
     corpus_dir: Path = REPO_DIR / "kb_corpus" / "curated"
+    raw_dir: Path = REPO_DIR / "kb_corpus" / "raw"
     retrieval_top_k: int = 6
     retrieval_score_threshold: float = 0.05
     use_qdrant: bool = True
     # Какие статусы чанков идут в индекс. Правило конвейера — только «проверен».
-    # На dev/демо сюда добавляют «разобран», иначе неотревьюенный корпус
-    # не индексируется вообще и ассистенту нечего отвечать.
-    indexed_statuses: str = "проверен"
+    # На dev/демо сюда добавляют «разобран»/«восстановлен», иначе неотревьюенный
+    # корпус не индексируется вообще и ассистенту нечего отвечать.
+    indexed_statuses: str = "проверен,восстановлен"
+
+    # Админка: правка базы знаний и каталога услуг без изменения кода
+    # (см. docs/админка.md). Токен — обязателен; пусто = админка выключена.
+    admin_token: str = ""
+    services_file: Path = BACKEND_DIR / "app" / "data" / "services.json"
+    taught_file: Path = REPO_DIR / "kb_corpus" / "taught" / "answers.json"
 
     # Голос (неделя 3)
     whisper_model: str = "large-v3-turbo"
