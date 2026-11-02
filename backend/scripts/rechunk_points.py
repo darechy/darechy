@@ -111,7 +111,7 @@ def rechunk_doc(path: Path) -> tuple[dict, list[str]]:
         )
         article_title = head.group(2).strip() if head else ""
 
-        for index, (point, piece) in enumerate(pieces):
+        for point, piece in pieces:
             # Преамбула = заголовок статьи, это не норма. В чанк не идёт,
             # но в целостности уже учтена (verify_roundtrip выше).
             if point is None:

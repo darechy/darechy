@@ -8,6 +8,7 @@
    с цитатами. Демо не падает, guardrail не нарушается.
 """
 
+import logging
 import re
 import time
 
@@ -17,6 +18,8 @@ from app.core.config import Settings
 from app.llm.client import LlmClient
 from app.models.schemas import ChatRequest, ChatResponse, Citation
 from app.retrieval.store import ChunkStore, tokenize
+
+logger = logging.getLogger(__name__)
 
 REFUSAL_TEMPLATE = (
     "Честный ответ: в базе знаний «ДаРэчы» по этому вопросу подтверждённой "
@@ -36,11 +39,37 @@ _SENTENCE_RE = re.compile(r"(?<=[.;])\s+(?=[А-ЯA-Z0-9(])")
 
 SYSTEM_PROMPT = (
     "Ты — «ДаРэчы», ассистент по государственным услугам Беларуси. Ты отвечаешь "
-    "исключительно по присланным тебе фрагментам нормативных правовых актов. "
-    "Правила: (1) опирайся только на фрагменты, не добавляй знания из себя; "
-    "(2) на каждый факт ставь ссылку-маркер вида [chunk_id] на соответствующий "
-    "фрагмент; (3) если во фрагментах нет ответа на вопрос — выведи ровно слово "
-    "ОТКАЗ и ничего больше; (4) пиши кратко и по-человечески, без канцелярита."
+    "исключительно по присланным фрагментам нормативных правовых актов.\n"
+    "Правила, которые нельзя нарушать:\n"
+    "(1) используй только присланные фрагменты, ничего не добавляй от себя;\n"
+    "(2) НИКОГДА не называй номер статьи или пункта, которого нет во фрагментах, "
+    "и не пересказывай норму, которой во фрагментах нет;\n"
+    "(3) на каждый факт в ответе ставь маркер вида [chunk_id] того фрагмента, "
+    "откуда взят факт;\n"
+    "(4) если во фрагментах нет прямого ответа на вопрос — ответь ровно одним "
+    "словом ОТКАЗ и больше ничем. Не отвечай на смежную тему, не перечисляй "
+    "другие пособия, не заполняй пробел догадкой: «похоже по теме» — это не ответ;\n"
+    "(5) пиши кратко и по-человечески, без канцелярита."
+)
+
+# Модель может «отказаться» своими словами, не написав ровно ОТКАЗ. Раньше
+# такой ответ уходил пользователю как обычный, хотя это был отказ.
+_REFUSAL_PHRASES = (
+    "отказ",
+    "нет ответа",
+    "не содержится",
+    "не содержит",
+    "не указано",
+    "не указаны",
+    "отсутствует",
+    "не установлено",
+    "не установлен",
+    "фрагментах нет",
+    "фрагменты не",
+    "нет информации",
+    "информации нет",
+    "не могу ответить",
+    "недостаточно",
 )
 
 
@@ -74,6 +103,37 @@ def _extract_markers(answer: str) -> list[str]:
             if chunk_id:
                 ids.append(chunk_id)
     return ids
+
+
+def _looks_like_refusal(answer: str) -> bool:
+    """Отказ своими словами, а не только словом ОТКАЗ."""
+    lowered = answer.lower()
+    return any(phrase in lowered for phrase in _REFUSAL_PHRASES)
+
+
+_ARTICLE_MENTION_RE = re.compile(r"стать[ияею][\s№]*(\d+(?:-\d+)?)", re.IGNORECASE)
+
+
+def _mentions_unknown_article(answer: str, hits) -> str | None:
+    """Ищет статью, названную моделью, но отсутствующую во фрагментах.
+
+    Реальный случай: на вопрос про пособие при рождении модель написала
+    «в соответствии со статьёй 19» — такой нормы во фрагментах не было,
+    и ответ оказался выдумкой. Возвращает номер статьи или None.
+    """
+    allowed: set[str] = set()
+    for hit in hits:
+        article = hit.chunk.location.article or ""
+        match = re.search(r"(\d+(?:-\d+)?)", article)
+        if match:
+            allowed.add(match.group(1))
+    if not allowed:
+        return None
+
+    for match in _ARTICLE_MENTION_RE.finditer(answer):
+        if match.group(1) not in allowed:
+            return match.group(1)
+    return None
 
 
 def _strip_refusal(answer: str) -> str:
@@ -205,7 +265,7 @@ class Orchestrator:
                 started=started,
             )
 
-        if "ОТКАЗ" in llm_answer:
+        if _looks_like_refusal(llm_answer):
             # Модель умеет дописать ОТКАЗ в конец нормального ответа, забыв, что
             # её просили вывести ровно это слово. Раньше маркер просачивался
             # в ответ пользователю («... ОТКАЗ» после верного абзаца).
@@ -217,6 +277,24 @@ class Orchestrator:
                 return self._done(REFUSAL_TEMPLATE, [], refusal=True,
                                   suggested=suggested, started=started)
             llm_answer = content
+
+        # Guardrail No3: модель назвала статью, которой нет во фрагментах.
+        # Это признак выдуманной нормы — такой ответ отдавать нельзя.
+        invented = _mentions_unknown_article(llm_answer, hits)
+        if invented is not None:
+            logger.warning(
+                "Модель сослалась на статью %s, которой нет во фрагментах — "
+                "отдаём дословный фрагмент вместо ответа модели",
+                invented,
+            )
+            answer, citations = self._extractive_answer(hits)
+            self._remember(request, answer)
+            return self._done(
+                answer, citations,
+                suggested=suggested,
+                started=started,
+                source="extractive",
+            )
 
         marker_ids = [i for i in _extract_markers(llm_answer) if self.store.get(i)]
         if marker_ids:
@@ -267,6 +345,10 @@ class Orchestrator:
                 f" ({chunk.doc_number}, {chunk.doc_date})\n{excerpt}"
             )
         context = "\n\n".join(blocks)
+        # Вопрос обязан быть в промпте явно. Раньше его там не было вообще:
+        # уходили только история и фрагменты, и модель отвечала «в воздух» —
+        # на вопрос, которого не видела в контексте.
+        context = f"{context}\n\n=== ВОПРОС ПОЛЬЗОВАТЕЛЯ ===\n{request.message}"
         if request.service_id:
             context = f"Контекст страницы услуги: {request.service_id}\n\n{context}"
         return context
@@ -282,7 +364,15 @@ class Orchestrator:
         citations = _citations_from([best.chunk.chunk_id], self.store)
         return answer, citations
 
-    def _done(self, answer, citations, refusal=False, suggested=None, started=0.0) -> ChatResponse:
+    def _done(
+        self,
+        answer,
+        citations,
+        refusal=False,
+        suggested=None,
+        started=0.0,
+        source="corpus",
+    ) -> ChatResponse:
         latency_ms = int((time.perf_counter() - started) * 1000)
         return ChatResponse(
             answer=answer,
@@ -290,4 +380,5 @@ class Orchestrator:
             refusal=refusal,
             suggested_services=suggested or [],
             latency_ms=latency_ms,
+            source="refusal" if refusal else source,
         )

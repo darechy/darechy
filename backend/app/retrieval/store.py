@@ -19,11 +19,20 @@ import httpx
 
 from app.kb.models import Chunk, RetrievedChunk
 from app.llm.client import LlmClient
+from app.retrieval.fusion import DEFAULT_DENSE_MARGIN, fuse_rankings
 
 _COLLECTION = "darechy"
 # Qdrant принимает только unsigned int или UUID как id точки — маппим chunk_id.
 _UUID_NS = uuid.UUID("6f1d2a3b-4c5d-4e6f-8a9b-0c1d2e3f4a5b")
 _EMBED_BATCH = 16
+
+# Пороги релевантности = guardrail «нет источника → отказ». Числа с замера:
+# нерелевантный вопрос даёт BM25 = 0.00 и косинус ≤ 0.449, релевантный —
+# BM25 ≥ 3.77 и косинус ≥ 0.633. Пороги стоят в зазоре и смещены к
+# «пропустить релевантное»: ложный отказ на демо заметнее, чем лишний
+# вопрос, случайно попавший по корпусу.
+DEFAULT_MIN_BM25 = 1.0
+DEFAULT_MIN_COSINE = 0.55
 
 _TOKEN_RE = re.compile(r"[\w]+", re.UNICODE)
 
@@ -257,40 +266,36 @@ class ChunkStore:
         llm: LlmClient,
         top_k: int = 6,
         score_threshold: float = 0.0,
+        dense_margin: float = DEFAULT_DENSE_MARGIN,
+        min_bm25: float = DEFAULT_MIN_BM25,
+        min_cosine: float = DEFAULT_MIN_COSINE,
     ) -> list[RetrievedChunk]:
-        """Гибрид BM25 + dense с RRF-фьюжном (reciprocal rank fusion, k=60).
+        """Гибрид BM25 + dense с порогом релевантности.
 
-        `score_threshold` применяется к сырым скорам плеч (BM25 — униграммные
-        веса, dense — косинус), НЕ к RRF: фьюжн-скор ранговый и мал по природе.
+        Порог — это и есть guardrail «нет источника → отказ». Без него поиск
+        всегда возвращает top-k, и на вопрос «какой сегодня курс доллара»
+        ассистент бодро пересказывает статьи закона о пособиях (проверено:
+        0 из 5 отказных кейсов проходили).
+
+        Замер на корпусе показал, что классы разделяются чисто:
+        - нерелевантные вопросы: BM25 = 0.00 (нет ни одного общего слова),
+          косинус 0.355–0.449;
+        - релевантные: BM25 3.77–14.51, косинус 0.633–0.747.
+
+        Поэтому: вопрос проходит, только если сработало **хотя бы одно** плечо —
+        либо лексическое совпадение (BM25 ≥ min_bm25), либо смысловое
+        (косинус ≥ min_cosine). Пустой результат → оркестратор отдаёт отказ.
+
+        `score_threshold` оставлен как более грубый фильтр для совместимости.
         """
         bm25_hits = [
-            h for h in self.search_bm25(query, top_k=top_k * 2)
-            if h.score >= score_threshold
+            h
+            for h in self.search_bm25(query, top_k=top_k * 2)
+            if h.score >= max(score_threshold, min_bm25)
         ]
         dense_hits = [
-            h for h in self.search_dense(query, llm, top_k=top_k * 2)
-            if h.score >= score_threshold
+            h
+            for h in self.search_dense(query, llm, top_k=top_k * 2)
+            if h.score >= max(score_threshold, min_cosine)
         ]
-
-        fused: dict[str, list] = {}
-        for hits in (bm25_hits, dense_hits):
-            for rank, hit in enumerate(hits):
-                rrf = 1.0 / (60 + rank + 1)
-                entry = fused.get(hit.chunk.chunk_id)
-                if entry:
-                    entry[0] += rrf
-                    entry[2].add(hit.via)
-                else:
-                    fused[hit.chunk.chunk_id] = [rrf, hit, {hit.via}]
-
-        merged: list[RetrievedChunk] = []
-        for score, hit, via in fused.values():
-            merged.append(
-                RetrievedChunk(
-                    chunk=hit.chunk,
-                    score=score,
-                    via="both" if len(via) > 1 else next(iter(via)),
-                )
-            )
-        merged.sort(key=lambda h: h.score, reverse=True)
-        return merged[:top_k]
+        return fuse_rankings(bm25_hits, dense_hits, top_k=top_k, margin=dense_margin)

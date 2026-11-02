@@ -5,28 +5,38 @@
       "id": "nav-001",
       "type": "navigation",
       "question": "У нас родился ребёнок, что мне оформлять?",
-      "expected_services": ["posobie-rozhdenie", "posobie-uhod-do-3-let", "posobie-12-nedel"],
+      "expected_services": [
+        "posobie-rozhdenie",
+        "posobie-uhod-do-3-let",
+        "posobie-12-nedel"
+      ],
       "expected_refusal": false
     },
     {
       "id": "nav-002",
       "type": "navigation",
       "question": "положены ли выплаты за первого ребёнка?",
-      "expected_services": ["posobie-rozhdenie"],
+      "expected_services": [
+        "posobie-rozhdenie"
+      ],
       "expected_refusal": false
     },
     {
       "id": "nav-003",
       "type": "navigation",
       "question": "сидим с малышом дома, на что можно рассчитывать от государства?",
-      "expected_services": ["posobie-uhod-do-3-let"],
+      "expected_services": [
+        "posobie-uhod-do-3-let"
+      ],
       "expected_refusal": false
     },
     {
       "id": "nav-004",
       "type": "navigation",
       "question": "жена встала на учёт по беременности рано, что-то за это платят?",
-      "expected_services": ["posobie-12-nedel"],
+      "expected_services": [
+        "posobie-12-nedel"
+      ],
       "expected_refusal": false
     },
     {
@@ -63,43 +73,111 @@
       "id": "fact-001",
       "type": "fact",
       "question": "Какие документы нужны для единовременного пособия в связи с рождением ребёнка?",
-      "expected_citation_contains": "❗заполнить после разбора актов",
-      "expected_refusal": false
+      "expected_refusal": true,
+      "_why": "Перечня документов в Законе 7-З НЕТ: он в приложении 1 к Постановлению 569 и в перечне админпроцедур (Указ 200). Корпус не покрывает — ассистент ОБЯЗАН отказаться, а не выдумывать список."
     },
     {
       "id": "fact-002",
       "type": "fact",
       "question": "В какой срок нужно обратиться за единовременным пособием при рождении ребёнка?",
-      "expected_citation_contains": "❗заполнить после разбора актов",
-      "expected_refusal": false
+      "expected_citation_contains": "статья 22",
+      "expected_refusal": false,
+      "_why": "ст. 22 «Сроки обращения за назначением государственных пособий»"
     },
     {
       "id": "fact-003",
       "type": "fact",
       "question": "Кому назначается пособие по уходу за ребёнком до 3 лет?",
-      "expected_citation_contains": "❗заполнить после разбора актов",
-      "expected_refusal": false
+      "expected_citation_contains": "статья 12",
+      "expected_refusal": false,
+      "_why": "ст. 12 п. 1 — круг лиц, имеющих право на пособие по уходу до 3 лет"
     },
     {
       "id": "fact-004",
       "type": "fact",
       "question": "Нужна ли справка с места работы второго родителя для пособия по уходу?",
-      "expected_citation_contains": "❗заполнить после разбора актов",
-      "expected_refusal": false
+      "expected_refusal": true,
+      "_why": "Справка с места работы второго родителя — требование перечня админпроцедур (Указ 200) и Постановления 569, не Закона. В корпусе нет → отказ."
     },
     {
       "id": "fact-005",
       "type": "fact",
       "question": "Размер пособия женщинам, ставшим на учёт до 12 недель беременности?",
-      "expected_citation_contains": "❗заполнить после разбора актов",
-      "expected_refusal": false
+      "expected_citation_contains": "статья 10",
+      "expected_refusal": false,
+      "_why": "ст. 10 п. 2 — 100% наибольшей величины БПМ на дату рождения"
     },
     {
       "id": "fact-006",
       "type": "fact",
       "question": "Где назначают единовременное пособие при рождении — куда идти?",
-      "expected_citation_contains": "❗заполнить после разбора актов",
-      "expected_refusal": false
+      "expected_citation_contains": "статья 21",
+      "expected_refusal": false,
+      "_why": "ст. 21 «Основные положения о назначении и выплате государственных пособий» — орган назначения"
+    },
+    {
+      "id": "fact-007",
+      "type": "fact",
+      "question": "на какой период назначается пособие по беременности и родам",
+      "expected_citation_contains": "статья 8",
+      "expected_refusal": false,
+      "_why": "ст. 8 «Период, на который назначается пособие по беременности и родам»"
+    },
+    {
+      "id": "fact-008",
+      "type": "fact",
+      "question": "какие виды государственных пособий существуют",
+      "expected_citation_contains": "статья 3",
+      "expected_refusal": false,
+      "_why": "ст. 3 «Виды государственных пособий»"
+    },
+    {
+      "id": "fact-009",
+      "type": "fact",
+      "question": "кто имеет право на пособие по уходу за ребенком до 3 лет",
+      "expected_citation_contains": "статья 12",
+      "expected_refusal": false,
+      "_why": "ст. 12 п. 1 — круг лиц, имеющих право на пособие"
+    },
+    {
+      "id": "fact-010",
+      "type": "fact",
+      "question": "прекращение выплаты государственных пособий",
+      "expected_citation_contains": "статья 24",
+      "expected_refusal": false,
+      "_why": "ст. 24 «Прекращение выплаты государственных пособий»"
+    },
+    {
+      "id": "fact-011",
+      "type": "fact",
+      "question": "в каком размере пособие на ребенка-инвалида до 18 лет",
+      "expected_citation_contains": "статья 18",
+      "expected_refusal": false,
+      "_why": "ст. 18 п. 5 — размеры пособия по уходу за ребенком-инвалидом"
+    },
+    {
+      "id": "fact-012",
+      "type": "fact",
+      "question": "пособие на детей старше 3 лет из отдельных категорий семей",
+      "expected_citation_contains": "статья 15",
+      "expected_refusal": false,
+      "_why": "ст. 15 — право и размеры для отдельных категорий семей"
+    },
+    {
+      "id": "fact-013",
+      "type": "fact",
+      "question": "обжалование решения по назначению пособия",
+      "expected_citation_contains": "статья 23",
+      "expected_refusal": false,
+      "_why": "ст. 23 «Обжалование решений по назначению государственных пособий»"
+    },
+    {
+      "id": "fact-014",
+      "type": "fact",
+      "question": "пособие на ребенка инфицированного вирусом иммунодефицита",
+      "expected_citation_contains": "статья 17",
+      "expected_refusal": false,
+      "_why": "ст. 17 — пособие на ребенка до 18 лет с ВИЧ"
     }
   ]
 }

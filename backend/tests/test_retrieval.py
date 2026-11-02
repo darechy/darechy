@@ -59,22 +59,40 @@ def test_rebuild_filters_unverified() -> None:
     assert store.get("raw_1") is None
 
 
-def test_hybrid_search_fuses_bm25_and_dense() -> None:
-    """Dense-плечо подменяем вручную: RRF должен поднять чанк, найденный обоими."""
+def test_hybrid_prefers_confident_dense() -> None:
+    """Уверенный dense решает: BM25 не должен перебивать его голосом рангов.
+
+    Ровно этот сценарий ломал чистый RRF на корпусе: на «до какого срока
+    обратиться за пособием» dense ставил ст. 22 первой, BM25 топил её на
+    4-е место, и RRF отдавал неверную ст. 16.
+    """
     store = _store_with_chunks()
-    store.dense_available = True
-    dense_hit = make_hit_like(store, "a_p2")
-    store.search_dense = lambda query, llm, top_k=6: [dense_hit]  # type: ignore[method-assign]
+    dense_hit = make_hit_like(store, "a_p2", score=0.9)
+    runner_up = make_hit_like(store, "a_p1", score=0.5)  # разрыв 0.4 > margin
+    store.search_dense = lambda query, llm, top_k=6: [dense_hit, runner_up]  # type: ignore[method-assign]
 
     hits = store.search("какой размер пособия на ребёнка", FakeLlm(), top_k=3)
     assert hits[0].chunk.chunk_id == "a_p2"
-    assert hits[0].via == "both"
+    assert hits[0].via == "dense"
 
 
-def make_hit_like(store: ChunkStore, chunk_id: str):
+def test_hybrid_falls_back_to_rrf_when_dense_unsure() -> None:
+    """Плотные скоры dense = модель колеблется → решает согласие плеч (RRF)."""
+    store = _store_with_chunks()
+    # Разрыв 0.01 меньше порога: dense не уверен, слово за фьюжном.
+    first = make_hit_like(store, "a_p1", score=0.70)
+    second = make_hit_like(store, "a_p2", score=0.69)
+    store.search_dense = lambda query, llm, top_k=6: [first, second]  # type: ignore[method-assign]
+
+    hits = store.search("пособие назначается с даты обращения", FakeLlm(), top_k=3)
+    # via="both" возможен только через RRF: он и есть признак фьюжна.
+    assert any(h.via == "both" for h in hits)
+
+
+def make_hit_like(store: ChunkStore, chunk_id: str, score: float = 0.9):
     from tests.fakes import make_hit
 
-    return make_hit(store.get(chunk_id).chunk, score=0.9, via="dense")  # type: ignore[union-attr]
+    return make_hit(store.get(chunk_id).chunk, score=score, via="dense")  # type: ignore[union-attr]
 
 
 # --- индексация dense-плеча -------------------------------------------------

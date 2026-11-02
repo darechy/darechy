@@ -54,7 +54,9 @@ def test_history_passed_to_llm_prompt():
 
     orchestrator.answer(ChatRequest(message="какое пособие при рождении ребёнка", session_id=session))
     assert "Предыдущий диалог" not in llm.chat_calls[0][1]  # у первого вопроса истории нет
-    orchestrator.answer(ChatRequest(message="какие документы нужны", session_id=session))
+    # Уточнение должно само находиться в корпусе, иначе порог релевантности
+    # отсечёт его и до LLM дело не дойдёт (это отдельный тест ниже).
+    orchestrator.answer(ChatRequest(message="а пособие при рождении ребёнка", session_id=session))
     assert "Пользователь: какое пособие при рождении ребёнка" in llm.chat_calls[1][1]
 
 
@@ -66,7 +68,7 @@ def test_history_isolated_by_session():
     orchestrator = Orchestrator(settings=SETTINGS, store=_fake_store(), llm=llm)
 
     orchestrator.answer(ChatRequest(message="какое пособие при рождении ребёнка", session_id="A"))
-    orchestrator.answer(ChatRequest(message="какие документы нужны", session_id="B"))
+    orchestrator.answer(ChatRequest(message="пособие назначается при рождении", session_id="B"))
 
     assert "Пользователь: какое пособие" not in llm.chat_calls[1][1]
 
@@ -86,3 +88,22 @@ def test_session_memory_bounds():
     memory.append("t3", "user", "z")  # LRU вытесняет t1
     assert memory.history("t1") == []
     assert memory.history("t3") != []
+
+
+def test_off_topic_question_refuses_without_calling_llm():
+    """Порог релевантности — это guardrail: на вопрос вне корпуса LLM не зовём.
+
+    «какие документы нужны» лексически похоже на закон, но перечня документов
+    в нём нет. Если бы вопрос прошёл, модель начала бы выдумывать список.
+    """
+    from app.chat.orchestrator import Orchestrator
+    from app.models.schemas import ChatRequest
+
+    llm = RecordingLlm()
+    orchestrator = Orchestrator(settings=SETTINGS, store=_fake_store(), llm=llm)
+    response = orchestrator.answer(ChatRequest(message="какой сегодня курс доллара"))
+
+    assert response.refusal is True
+    assert response.citations == []
+    assert response.source == "refusal"
+    assert llm.chat_calls == [], "на нерелевантный вопрос модель звать нельзя"
