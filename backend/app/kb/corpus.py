@@ -86,8 +86,14 @@ def split_points(text: str) -> list[tuple[str | None, str]]:
         body = text[newline:].strip()
 
     matches = _valid_points(body)
+    if not matches:
+        # Нет нумерованных пунктов — статья остаётся цельным чанком.
+        # Возвращать только заголовок нельзя: текст статьи потеряется,
+        # а проверка целостности это поймает и отменит импорт.
+        return [(None, text)]
+
     pieces: list[tuple[str | None, str]] = []
-    preamble = f"{head}\n{body[: matches[0].start()]}".strip() if matches else (head or body)
+    preamble = f"{head}\n{body[: matches[0].start()]}".strip() if head else body[: matches[0].start()].strip()
     if preamble:
         pieces.append((None, preamble))
     for index, match in enumerate(matches):
@@ -126,9 +132,28 @@ def chunk_article(
         article_title = ""
 
     chunks: list[Chunk] = []
-    for point, piece in pieces:
-        if point is None:
-            continue  # преамбула = заголовок статьи, это не норма
+    point_pieces = [(point, piece) for point, piece in pieces if point is not None]
+
+    if not point_pieces:
+        # Статья без нумерованных пунктов (например, Закон о погребении):
+        # по конвенции kb_corpus/README.md чанк = «статья ИЛИ пункт», поэтому
+        # здесь чанк — статья целиком. Раньше такие статьи терялись полностью.
+        number = article_label.split()[-1] if article_label.split() else "0"
+        return ChunkingReport(
+            chunks=[
+                Chunk(
+                    chunk_id=f"{doc_prefix}_st-{number}",
+                    title=(f"{article_label.capitalize()}. {article_title}"
+                           if article_title else article_label.capitalize()),
+                    location=ChunkLocation(article=article_label, point=None),
+                    text=text.strip(),
+                    status=status,
+                )
+            ],
+            errors=[],
+        )
+
+    for point, piece in point_pieces:
         chunks.append(
             Chunk(
                 chunk_id=f"{doc_prefix}_st-{article_label.split()[-1]}_п-{point.replace('.', '-')}",
@@ -206,6 +231,58 @@ def build_curated_doc(raw: str, doc_prefix: str, status: str = "восстано
 
     try:
         return CuratedDoc.model_validate({"doc": doc_meta, "chunks": [c.model_dump() for c in chunks]}), []
+    except ValueError as exc:
+        return None, [f"схема не приняла документ: {exc}"]
+
+
+def build_flat_act(
+    raw: str,
+    doc_prefix: str,
+    status: str = "восстановлен",
+) -> tuple[CuratedDoc | None, list[str]]:
+    """Акт без структуры «Статья N.»: режем по нумерованным пунктам.
+
+    Так устроены постановления министерств (№ 88 о БПМ): «1. Установить…»,
+    «2. Настоящее постановление вступает в силу…». Если нумерации нет вообще —
+    весь текст одним чанком, чтобы не потерять акт из базы.
+    """
+    doc_meta, _title, _articles = parse_act_markdown(raw)
+    pieces = split_points(raw)
+    if not verify_roundtrip(pieces, raw):
+        return None, ["склейка пунктов не совпала с исходным текстом — импорт отменён"]
+
+    chunks: list[Chunk] = []
+    point_pieces = [(point, piece) for point, piece in pieces if point is not None]
+
+    for point, piece in point_pieces:
+        chunks.append(
+            Chunk(
+                chunk_id=f"{doc_prefix}_п-{point.replace('.', '-')}",
+                title=f"Пункт {point}",
+                location=ChunkLocation(article=None, point=f"пункт {point}"),
+                text=piece,
+                status=status,
+            )
+        )
+
+    if not chunks:
+        # Нумерации нет — акт целиком одним чанком. Место цитаты обязательно:
+        # без него валидатор справедливо не пускает чанк в индекс.
+        body = raw.split("\n---\n", 1)[-1].strip()
+        chunks = [
+            Chunk(
+                chunk_id=doc_prefix,
+                title=doc_meta.get("title") or "Акт",
+                location=ChunkLocation(article=None, point="весь акт"),
+                text=body,
+                status=status,
+            )
+        ]
+
+    try:
+        return CuratedDoc.model_validate(
+            {"doc": doc_meta, "chunks": [c.model_dump() for c in chunks]}
+        ), []
     except ValueError as exc:
         return None, [f"схема не приняла документ: {exc}"]
 

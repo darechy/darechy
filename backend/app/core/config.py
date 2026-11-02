@@ -36,6 +36,9 @@ class Settings(BaseSettings):
     # одновременно с эмбеддингами ему места нет. Эмбеддинги греются чаще — дольше.
     chat_keep_alive: str = "30s"
     embed_keep_alive: str = "5m"
+    # Потолок длины ответа модели. 400 токенов ≈ 17 с на 1.7b; без лимита
+    # модель выдаёт до 1500 токенов и ответ идёт больше минуты.
+    max_new_tokens: int = 400
 
     # RAG
     corpus_dir: Path = REPO_DIR / "kb_corpus" / "curated"

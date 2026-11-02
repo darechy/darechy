@@ -20,6 +20,7 @@ class LlmClient:
         self.embedding_dim = settings.embedding_dim
         self.chat_keep_alive = settings.chat_keep_alive
         self.embed_keep_alive = settings.embed_keep_alive
+        self.max_new_tokens = settings.max_new_tokens
 
     # --- эмбеддинги ---------------------------------------------------------
 
@@ -70,7 +71,10 @@ class LlmClient:
                     # фрагментам, а размышления только жгут время на слабой машине.
                     "think": False,
                     "keep_alive": self.chat_keep_alive,
-                    "options": {"temperature": 0.1},
+                    # num_predict — потолок длины ответа. Без него модель на
+                    # 1.7b охотно пишет 1500 токенов (~70 с) вместо трёх
+                    # предложений: замерено, ответ про пособие занимал 72 с.
+                    "options": {"temperature": 0.1, "num_predict": self.max_new_tokens},
                 },
                 timeout=120.0,
             )
