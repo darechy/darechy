@@ -18,6 +18,7 @@ import logging
 import re
 import threading
 import uuid
+from collections import Counter
 from datetime import UTC, datetime
 from pathlib import Path
 
@@ -35,10 +36,20 @@ logger = logging.getLogger(__name__)
 
 _TOKEN_RE = re.compile(r"[\w]+", re.UNICODE)
 _MIN_STEM = 5  # «рожден» ловит «рождения»; более короткие стемы дают ложные срабатывания
+# Слово, которое встречается в корпусе чаще этой доли пунктов, считается
+# «пустым» триггером и само по себе ответ не включает.
+_MAX_DF_SHARE = 0.25
 
 
 def _tokens(text: str) -> list[str]:
-    return [t for t in _TOKEN_RE.findall(text.lower()) if len(t) > 1]
+    """Токены в нижнем регистре с ё→е.
+
+    Без нормализации ё основа слова не совпадает: в акте «ребёнка» даёт стем
+    «ребён», а пользователь пишет «ребенка» — «ребен». Из-за этого не работал
+    ни отсев «пустых» триггеров, ни само сопоставление.
+    """
+    normalized = text.lower().replace("ё", "е")
+    return [t for t in _TOKEN_RE.findall(normalized) if len(t) > 1]
 
 
 def _stem(token: str) -> str:
@@ -66,14 +77,36 @@ class TaughtStore:
         self._lock = threading.Lock()
         self._answers: list[TaughtAnswer] = []
         self._corpus_ids: set[str] = set()
+        self._token_df: Counter[str] = Counter()
+        self._corpus_size = 0
         self.set_corpus(chunks or [])
         self._load()
 
     # --- корпус для проверки источников -------------------------------------
 
     def set_corpus(self, chunks: list[Chunk]) -> None:
-        """Обновляет список известных chunk_id — источник обязан быть в корпусе."""
+        """Обновляет корпус: какие chunk_id существуют и насколько редки слова.
+
+        Частотность нужна для отсева «пустых» триггеров: слово «ребёнок» есть
+        почти в каждом пункте закона, и при режиме «достаточно одного» оно
+        утаскивало на выученный ответ любой вопрос про детей. Проверено на
+        живом API: вопрос «какие документы нужны» отдавал ответ про 14 БПМ.
+        """
         self._corpus_ids = {chunk.chunk_id for chunk in chunks}
+        self._corpus_size = len(chunks)
+        token_df: Counter[str] = Counter()
+        for chunk in chunks:
+            stems = {_stem(token) for token in _tokens(chunk.text)}
+            token_df.update(stems)
+        self._token_df = token_df
+
+    def is_distinctive(self, keyword: str) -> bool:
+        """Редкое ли слово: встречается меньше чем в `_MAX_DF_SHARE` корпуса."""
+        if self._corpus_size == 0:
+            return True  # корпуса нет — судить не по чему, не блокируем
+        stem = _stem(keyword.lower().strip())
+        share = self._token_df.get(stem, 0) / self._corpus_size
+        return share <= _MAX_DF_SHARE
 
     def unknown_sources(self) -> list[tuple[str, str]]:
         """Выученные ответы со ссылками на несуществующие чанки: (id ответа, chunk_id)."""
@@ -155,8 +188,14 @@ class TaughtStore:
     def match(self, question: str, service_id: str | None = None) -> TaughtMatch | None:
         """Ищет выученный ответ, который срабатывает на вопрос.
 
+        Правило специфичности: совпадение по «пустому» слову (которое есть
+        в корпусе чаще `_MAX_DF_SHARE`) само по себе ответ не включает — нужен
+        хотя бы один редкий триггер. Иначе слово «ребёнок» угоняло любой
+        вопрос про детей: проверено, «какие документы нужны» отдавал ответ
+        про 14 БПМ вместо честного отказа.
+
         Приоритет: привязка к услуге (service_id) важнее общих ответов, затем
-        больше совпавших триггеров. Возвращается один лучший ответ.
+        больше совпавших триггеров.
         """
         tokens = {_stem(token) for token in _tokens(question)}
         best: TaughtMatch | None = None
@@ -172,6 +211,9 @@ class TaughtStore:
             if not matched:
                 continue
             if item.match_mode == "all" and len(matched) < len(item.keywords):
+                continue
+            # Пустые триггеры не считаются: нужен хотя бы один специфичный.
+            if not any(self.is_distinctive(keyword) for keyword in matched):
                 continue
 
             score = len(matched) / len(item.keywords)
