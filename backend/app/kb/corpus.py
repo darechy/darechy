@@ -67,19 +67,32 @@ def _valid_points(text: str) -> list[re.Match[str]]:
 
 
 def split_points(text: str) -> list[tuple[str | None, str]]:
-    """Режет статью на пункты, не меняя текст. Первый элемент может быть None — преамбула."""
-    text = text.strip()
-    matches = _valid_points(text)
-    if not matches:
-        return [(None, text)]
+    """Режет статью на пункты, не меняя текст. Первый элемент может быть None — преамбула.
 
+    Заголовок «Статья N.» сначала вынимается отдельно. Иначе «Статья 1. Право…»
+    распознавалось как пункт «1» (единица стоит после пробела и перед заглавной),
+    и рядом появлялся настоящий пункт 1 — два чанка с одним chunk_id. Для
+    «Статья 11.» этого не происходило, поэтому баг и вылез только на статье 1.
+    """
+    text = text.strip()
+    head = ""
+    body = text
+    article_head = _ARTICLE_HEAD.match(text)
+    if article_head:
+        newline = text.find("\n")
+        if newline == -1:
+            return [(None, text)]
+        head = text[:newline].strip()
+        body = text[newline:].strip()
+
+    matches = _valid_points(body)
     pieces: list[tuple[str | None, str]] = []
-    head = text[: matches[0].start()].strip()
-    if head:
-        pieces.append((None, head))
+    preamble = f"{head}\n{body[: matches[0].start()]}".strip() if matches else (head or body)
+    if preamble:
+        pieces.append((None, preamble))
     for index, match in enumerate(matches):
-        end = matches[index + 1].start() if index + 1 < len(matches) else len(text)
-        pieces.append((match.group(1), text[match.start() : end].strip()))
+        end = matches[index + 1].start() if index + 1 < len(matches) else len(body)
+        pieces.append((match.group(1), body[match.start() : end].strip()))
     return pieces
 
 
