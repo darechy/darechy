@@ -15,6 +15,7 @@ from app.models.schemas import Service, Situation
 # Названия жизненных ситуаций на главной портала (человеческим языком).
 SITUATION_TITLES: dict[str, str] = {
     "rozhdenie-rebenka": "Родился ребёнок",
+    "smert-blizkogo": "Умер близкий человек",
 }
 
 

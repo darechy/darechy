@@ -22,8 +22,8 @@ from app.kb.models import RetrievedChunk
 _ARTICLE_RE = re.compile(r"^(?P<article>.*_st-\d+)", re.UNICODE)
 
 # Насколько второй и последующий пункты той же статьи усиливают её скор.
-# Малый вес: согласие нескольких пунктов — признак, но он не должен
-# перебивать сильный одиночный пункт.
+# Вес относительный (доля от скора лучшего пункта): так бонус одинаково
+# работает и для BM25, и для косинуса, и для рангового RRF.
 _NEIGHBOUR_BONUS = 0.05
 
 
@@ -50,7 +50,11 @@ def group_by_article(hits: list[RetrievedChunk]) -> list[RetrievedChunk]:
     for article_hits in grouped.values():
         article_hits.sort(key=lambda h: h.score, reverse=True)
         best = article_hits[0]
-        score = best.score + _NEIGHBOUR_BONUS * (len(article_hits) - 1)
+        # Бонус ПРОПОРЦИОНАЛЕН скору, а не фиксирован: BM25, косинус и RRF
+        # живут в разных шкалах, и одна и та же константа 0.05 для RRF
+        # (вклад плеча ≈ 0.016) весила больше, чем для BM25 — группировка
+        # начинала искажать ранжирование.
+        score = best.score * (1.0 + _NEIGHBOUR_BONUS * (len(article_hits) - 1))
         result.append(
             RetrievedChunk(chunk=best.chunk, score=score, via=best.via)
         )

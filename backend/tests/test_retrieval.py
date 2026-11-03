@@ -182,15 +182,21 @@ def test_dense_index_recreates_collection_on_dimension_mismatch(monkeypatch) -> 
     assert fake.created == [{"vectors": {"size": 8, "distance": "Cosine"}}]
 
 
-def test_dense_index_keeps_collection_when_dimension_matches(monkeypatch) -> None:
+def test_dense_index_recreates_collection_to_purge_stale_points(monkeypatch) -> None:
+    """Коллекция пересоздаётся даже при совпадении размерности — иначе мусор.
+
+    Реальный баг: id точки — uuid5 от chunk_id. После переименования чанков
+    старые векторы остаются навсегда: в коллекции лежало 455 точек вместо 180,
+    и dense-поиск выдавал чанки, которых в корпусе уже нет.
+    """
     store = ChunkStore(qdrant_url="http://qdrant:6333")
     store.rebuild([make_chunk("a_p1", "Текст про пособие.")])
     fake = _RecordingQdrant(collection_exists=True, vector_size=8)
     _patch_qdrant(monkeypatch, fake)
 
     store.dense_index(FakeLlm())
-    assert fake.deleted == []
-    assert fake.created == []
+    assert fake.deleted, "коллекцию нужно пересоздавать, чтобы не копить старые векторы"
+    assert fake.created == [{"vectors": {"size": 8, "distance": "Cosine"}}]
 
 
 def test_dense_index_bails_out_without_embeddings(monkeypatch) -> None:

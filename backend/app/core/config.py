@@ -45,6 +45,11 @@ class Settings(BaseSettings):
     ai_router: bool = True
     # Прогревать модели при старте: убирает «первый ответ 11 с» после простоя.
     warmup_on_start: bool = True
+    # Переспрашивать услугу, если спросили про документы без привязки.
+    clarify_doc_intent: bool = True
+    # Сворачивать пункты в статьи при поиске. По замеру на текущем корпусе
+    # выключено (71,4% против 64,3%); см. scripts/tune_gate.py.
+    group_articles: bool = False
 
     # RAG
     corpus_dir: Path = REPO_DIR / "kb_corpus" / "curated"

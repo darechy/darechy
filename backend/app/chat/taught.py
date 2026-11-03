@@ -40,6 +40,19 @@ _MIN_STEM = 5  # «рожден» ловит «рождения»; более к
 # «пустым» триггером и само по себе ответ не включает.
 _MAX_DF_SHARE = 0.25
 
+# Слова-намерения: «какие документы», «где получить», «как оформить». Сами по
+# себе они не привязаны к услуге, поэтому не могут включать выученный ответ.
+# Реальный баг: вопрос «какие документы нужны для получения паспорта» отдавал
+# документы для пособия при рождении — только потому, что в нём есть фраза
+# «какие документы». Лечится не частотностью (слово «документы» редкое), а
+# запретом: общий триггер обязан быть привязан к услуге.
+_GENERIC_TRIGGER_TOKENS = {
+    "как", "какие", "какой", "какая", "где", "куда", "когда", "сколько",
+    "нужно", "нужны", "надо", "получить", "оформить", "подать", "сделать",
+    "документ", "документы", "справка", "справки", "заявление", "перечень",
+    "порядок", "срок", "сроки", "условия", "размер", "выплата", "пособие",
+}
+
 
 def _tokens(text: str) -> list[str]:
     """Токены в нижнем регистре с ё→е.
@@ -101,12 +114,38 @@ class TaughtStore:
         self._token_df = token_df
 
     def is_distinctive(self, keyword: str) -> bool:
-        """Редкое ли слово: встречается меньше чем в `_MAX_DF_SHARE` корпуса."""
+        """Редкое ли слово: встречается в корпусе, но меньше чем в 25% пунктов.
+
+        Для многословной фразы смотрим по отдельным словам. Раньше фраза
+        стеммилась целиком («какие документы» → «какие докумен»), такого стема
+        в словаре нет — и фраза автоматически считалась редкой.
+        """
         if self._corpus_size == 0:
             return True  # корпуса нет — судить не по чему, не блокируем
-        stem = _stem(keyword.lower().strip())
-        share = self._token_df.get(stem, 0) / self._corpus_size
-        return share <= _MAX_DF_SHARE
+        tokens = _tokens(keyword) or [keyword.strip().lower()]
+        for token in tokens:
+            stem = _stem(token)
+            count = self._token_df.get(stem, 0)
+            # Слова нет в корпусе — это не «редкое совпадение», а отсутствие
+            # доказательства: такое слово специфичности не даёт.
+            if count and count / self._corpus_size <= _MAX_DF_SHARE:
+                return True
+        return False
+
+    @staticmethod
+    def keywords_are_generic(keywords: list[str]) -> bool:
+        """Все триггеры — слова-намерения («какие документы», «где получить»).
+
+        Такой ответ без привязки к услуге срабатывать не должен: он ответит
+        не на тот вопрос. Админка это отклоняет, а match() — игнорирует.
+        """
+        if not keywords:
+            return True
+        for keyword in keywords:
+            tokens = _tokens(keyword) or [keyword.strip().lower()]
+            if any(token not in _GENERIC_TRIGGER_TOKENS for token in tokens):
+                return False
+        return True
 
     def unknown_sources(self) -> list[tuple[str, str]]:
         """Выученные ответы со ссылками на несуществующие чанки: (id ответа, chunk_id)."""
@@ -185,7 +224,12 @@ class TaughtStore:
 
     # --- срабатывание -------------------------------------------------------
 
-    def match(self, question: str, service_id: str | None = None) -> TaughtMatch | None:
+    def match(
+        self,
+        question: str,
+        service_id: str | None = None,
+        routed_services: list[str] | None = None,
+    ) -> TaughtMatch | None:
         """Ищет выученный ответ, который срабатывает на вопрос.
 
         Правило специфичности: совпадение по «пустому» слову (которое есть
@@ -199,9 +243,21 @@ class TaughtStore:
         """
         tokens = {_stem(token) for token in _tokens(question)}
         best: TaughtMatch | None = None
+        routed = set(routed_services or [])
+        if service_id:
+            routed.add(service_id)
 
         for item in self.all(enabled_only=True):
-            if item.service_id and service_id and item.service_id != service_id:
+            bound = bool(item.service_id)
+            if bound and item.service_id not in routed:
+                # Ответ привязан к услуге и уместен ТОЛЬКО когда вопрос
+                # распознан как вопрос об этой услуге. Проверка жёсткая: если
+                # маршрут пуст (вопрос не про наши услуги) — тоже не срабатываем.
+                # Раньше при пустом маршруте условие пропускало проверку, и
+                # «какие документы для паспорта» получало документы на пособие.
+                continue
+            if not bound and self.keywords_are_generic(item.keywords):
+                # Общий триггер без привязки — не срабатывает вовсе.
                 continue
             matched = [
                 keyword
@@ -212,8 +268,10 @@ class TaughtStore:
                 continue
             if item.match_mode == "all" and len(matched) < len(item.keywords):
                 continue
-            # Пустые триггеры не считаются: нужен хотя бы один специфичный.
-            if not any(self.is_distinctive(keyword) for keyword in matched):
+            # Привязка к услуге уже различает вопрос — проверка редкости для
+            # таких ответов не нужна (иначе «какие документы» + привязка
+            # блокировались бы дважды). Без привязки — нужен редкий триггер.
+            if not bound and not any(self.is_distinctive(keyword) for keyword in matched):
                 continue
 
             score = len(matched) / len(item.keywords)

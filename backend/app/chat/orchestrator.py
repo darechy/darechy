@@ -18,12 +18,30 @@ from app.chat.sessions import SessionMemory
 from app.core.config import Settings
 from app.llm.client import LlmClient
 from app.models.schemas import ChatRequest, ChatResponse, Citation
+from app.retrieval.grouping import article_key
 from app.retrieval.store import ChunkStore, tokenize
 
 if TYPE_CHECKING:  # импорт только для аннотаций: taught.py сам импортирует схемы
     from app.chat.taught import TaughtStore
 
 logger = logging.getLogger(__name__)
+
+# Вопросы про документы («какие документы нужны», «что взять с собой») без
+# указания услуги. Корпус умеет отвечать на них только в привязке к услуге:
+# без неё поиск тянет документы из подходящих по словам процедур, и модель
+# честно пересказывает не тот пункт. Реальный случай: «какие документы нужны
+# для получения паспорта» отвечало документами на пособие при рождении.
+CLARIFY_TEMPLATE = (
+    "Уточните, пожалуйста, для какой услуги нужны документы — от этого зависит "
+    "перечень. Я подскажу по этим услугам: {services}. "
+    "Если вашей ситуации в списке нет — скажите своими словами, я поищу в базе "
+    "нормативных актов."
+)
+
+_DOC_INTENT_TOKENS = {
+    "документ", "документы", "справка", "справки", "бумаги", "перечень",
+    "заявление", "свидетельство", "копия", "копии",
+}
 
 REFUSAL_TEMPLATE = (
     "Честный ответ: в базе знаний «ДаРэчы» по этому вопросу подтверждённой "
@@ -112,13 +130,39 @@ def _extract_markers(answer: str) -> list[str]:
     return ids
 
 
+_REFUSAL_MAX_CHARS = 300
+
+
+def _accepted_markers(answer: str, hits, store: ChunkStore) -> list[str]:
+    """Маркеры ответа, которые подтверждены переданными фрагментами.
+
+    Принимаем либо точное совпадение chunk_id из контекста, либо ссылку на
+    пункт той же статьи, что была в контексте (модель часто указывает пункт
+    точнее, чем найденный фрагмент). Всё остальное — выдумка или ссылка на
+    фрагмент, которого модель не видела.
+    """
+    context_ids = {hit.chunk.chunk_id for hit in hits}
+    context_articles = {article_key(cid) for cid in context_ids}
+    accepted: list[str] = []
+    for marker in _extract_markers(answer):
+        if marker in context_ids:
+            if marker not in accepted:
+                accepted.append(marker)
+        elif article_key(marker) in context_articles and store.get(marker):
+            if marker not in accepted:
+                accepted.append(marker)
+    return accepted
+
+
 def _looks_like_refusal(answer: str) -> bool:
     """Отказ своими словами, а не только словом ОТКАЗ."""
     lowered = answer.lower()
     return any(phrase in lowered for phrase in _REFUSAL_PHRASES)
 
 
-_ARTICLE_MENTION_RE = re.compile(r"стать[ияею][\s№]*(\d+(?:-\d+)?)", re.IGNORECASE)
+_ARTICLE_MENTION_RE = re.compile(
+    r"(?:стать[ияеюё]й?|ст\.)\s*№?\s*(\d+(?:-\d+)?)", re.IGNORECASE
+)
 
 
 def _mentions_unknown_article(answer: str, hits) -> str | None:
@@ -150,8 +194,9 @@ def _strip_refusal(answer: str) -> str:
     превращает это в отказ-шаблон. Непустая — модель ответила, но зачем-то
     дописала маркер: оставляем текст, маркер убираем.
     """
+    # Маркеры здесь НЕ трогаем: они нужны дальше для проверки ссылок.
+    # Убирает их финальный _strip_markers — уже для показа пользователю.
     content = answer.replace("ОТКАЗ", " ")
-    content = _MARK_RE.sub("", content)
     content = re.sub(r"\s+", " ", content).strip(" \t\n-—:,;.")
     return content
 
@@ -233,9 +278,10 @@ class Orchestrator:
     def answer(self, request: ChatRequest) -> ChatResponse:
         started = time.perf_counter()
         history = self.sessions.history(request.session_id)
-        # ИИ-слой: правила отвечают, когда уверены; при неоднозначности
-        # арбитром выступает LLM. Результат ещё и ограничивает поиск актами
-        # выбранной услуги — иначе вопрос про документы тянет чужие процедуры.
+
+        # Маршрут считается ПЕРВЫМ: он нужен и слою доучивания (выученный ответ,
+        # привязанный к услуге, уместен только если вопрос — об этой услуге),
+        # и скоупу поиска.
         route_started = time.perf_counter()
         routed, routed_by = self._route(request.message)
         route_ms = int((time.perf_counter() - route_started) * 1000)
@@ -249,7 +295,7 @@ class Orchestrator:
         # Слой доучивания: ответ, подтверждённый администратором, важнее
         # генерации. Отвечает мгновенно и не зависит от качества модели, но
         # цитаты всё равно берутся из корпуса — не из текста администратора.
-        taught = self._taught_answer(request)
+        taught = self._taught_answer(request, routed)
         if taught is not None:
             self._remember(request, taught.answer)
             return self._done(
@@ -258,6 +304,15 @@ class Orchestrator:
                 suggested=suggested,
                 started=started,
                 source="taught",
+            )
+
+        # Интент «какие документы» без распознанной услуги: уточняем, а не
+        # угадываем. Иначе ответ будет не про тот документ, который спросили.
+        if self._needs_clarification(request, routed, history):
+            answer = CLARIFY_TEMPLATE.format(services=self._service_titles())
+            self._remember(request, answer)
+            return self._done(
+                answer, [], suggested=suggested, started=started, source="clarify"
             )
 
         # Уточняющие вопросы («а какие документы?») теряют смысл без контекста:
@@ -282,6 +337,7 @@ class Orchestrator:
             top_k=request.top_k,
             score_threshold=self.settings.retrieval_score_threshold,
             prefer_chunk_ids=prefer_ids or None,
+            group_articles=self.settings.group_articles,
         )
         search_ms = int((time.perf_counter() - search_started) * 1000)
         if not hits:
@@ -310,13 +366,13 @@ class Orchestrator:
             )
 
         if _looks_like_refusal(llm_answer):
-            # Модель умеет дописать ОТКАЗ в конец нормального ответа, забыв, что
-            # её просили вывести ровно это слово. Раньше маркер просачивался
-            # в ответ пользователю («... ОТКАЗ» после верного абзаца).
-            # Смотрим на содержательную часть: пусто — честный отказ,
-            # есть текст — это ответ, маркер просто выкидываем.
+            # Единая политика: короткая реплика с признаком отказа и без
+            # подтверждённой ссылки — это отказ, а не ответ. Раньше текст
+            # «во фрагментах нет информации» уходил пользователю как обычный
+            # ответ с автоматически приклеенной цитатой.
             content = _strip_refusal(llm_answer)
-            if not content:
+            has_marker = bool(_accepted_markers(llm_answer, hits, self.store))
+            if not content or (len(content) < _REFUSAL_MAX_CHARS and not has_marker):
                 self._remember(request, None)
                 return self._done(REFUSAL_TEMPLATE, [], refusal=True,
                                   suggested=suggested, started=started)
@@ -340,12 +396,20 @@ class Orchestrator:
                 source="extractive",
             )
 
-        marker_ids = [i for i in _extract_markers(llm_answer) if self.store.get(i)]
-        if marker_ids:
-            citations = _citations_from(marker_ids, self.store)
-        else:
-            # Модель не промаркировала — цитируем лучший чанк вместо «веры на слово».
-            citations = _citations_from([hits[0].chunk.chunk_id], self.store)
+        # Ссылки принимаем ТОЛЬКО из фрагментов, которые реально ушли в промпт.
+        # Раньше проверялось существование id во всём корпусе, и модель могла
+        # сослаться на пункт, которого она не видела.
+        marker_ids = _accepted_markers(llm_answer, hits, self.store)
+        if not marker_ids:
+            # Нет подтверждённой ссылки — приклеивать цитату к тексту модели
+            # нельзя: получится «непроверенный ответ с видом проверенного».
+            # Отдаём дословный фрагмент акта с честной пометкой.
+            answer, citations = self._extractive_answer(hits)
+            self._remember(request, answer)
+            return self._done(
+                answer, citations, suggested=suggested, started=started, source="extractive"
+            )
+        citations = _citations_from(marker_ids, self.store)
         answer = _strip_markers(llm_answer)
         self._remember(request, answer)
         return self._done(
@@ -354,6 +418,38 @@ class Orchestrator:
         )
 
     # --- внутреннее ---------------------------------------------------------
+
+    def _service_titles(self) -> str:
+        """Человеческий список услуг для уточняющего вопроса."""
+        if self.router is None:
+            return "государственные пособия семьям с детьми"
+        titles = [
+            service.title.lower()
+            for service in getattr(self.router, "_services", [])[:5]
+        ]
+        return "; ".join(titles) if titles else "государственные пособия семьям с детьми"
+
+    def _needs_clarification(
+        self, request: ChatRequest, routed: list[str], history: list[dict] | None = None
+    ) -> bool:
+        """Просим уточнить услугу, если спрашивают про документы без привязки.
+
+        Услуга со страницы (`service_id`), распознанный маршрут или предыдущий
+        диалог снимают вопрос: тогда мы уже знаем, о какой услуге речь.
+        Переспрашивать «а какие документы?» после разговора о пособии — глупо.
+        """
+        if routed:
+            return False
+        if history:
+            return False
+        if self.settings and not getattr(self.settings, "clarify_doc_intent", True):
+            return False
+        if getattr(self, "taught", None) is not None and self.taught.match(
+            request.message, routed_services=routed
+        ):
+            return False  # выученный ответ знает, о чём речь
+        tokens = set(tokenize(request.message))
+        return bool(tokens & _DOC_INTENT_TOKENS)
 
     def _route(self, message: str) -> tuple[list[str], str]:
         """Маршрут услуги и кто решил. Нет роутера — пустой маршрут."""
@@ -366,11 +462,17 @@ class Orchestrator:
             return self.router.route(message), "rules"
         return route_with_ai(message)
 
-    def _taught_answer(self, request: ChatRequest) -> ChatResponse | None:
+    def _taught_answer(
+        self, request: ChatRequest, routed: list[str] | None = None
+    ) -> ChatResponse | None:
         """Проверяет слой доучивания. None — выученного ответа нет, идём искать."""
         if self.taught is None:
             return None
-        match = self.taught.match(request.message, service_id=request.service_id)
+        match = self.taught.match(
+            request.message,
+            service_id=request.service_id,
+            routed_services=routed,
+        )
         if match is None:
             return None
 

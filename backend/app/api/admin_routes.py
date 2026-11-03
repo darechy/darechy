@@ -346,6 +346,15 @@ def taught_create(
                 + ". Выучить ответ без подтверждённой нормы нельзя."
             },
         )
+    if not payload.service_id and store.keywords_are_generic(payload.keywords):
+        raise HTTPException(
+            status_code=422,
+            detail={
+                "reason": "триггеры общие («какие документы», «где получить») — "
+                "такой ответ перехватит чужие вопросы. Привяжите ответ к услуге "
+                "или дайте специфичные слова."
+            },
+        )
     created: TaughtAnswer = store.create(payload)
     return {"created": created.model_dump(mode="json")}
 
@@ -365,6 +374,18 @@ def taught_update(
                 status_code=422,
                 detail={"reason": "источник не найден в корпусе: " + ", ".join(unknown)},
             )
+    target = store.get(answer_id)
+    effective_keywords = payload.keywords if payload.keywords is not None else (
+        target.keywords if target else []
+    )
+    effective_service = payload.service_id if payload.service_id is not None else (
+        target.service_id if target else None
+    )
+    if not effective_service and store.keywords_are_generic(effective_keywords):
+        raise HTTPException(
+            status_code=422,
+            detail={"reason": "триггеры общие и нет привязки к услуге — ответ перехватит чужие вопросы"},
+        )
     updated = store.update(answer_id, payload)
     if updated is None:
         raise HTTPException(status_code=404, detail={"reason": f"ответ {answer_id} не найден"})

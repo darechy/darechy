@@ -31,7 +31,7 @@
       "документы для пособия"
     ],
     "match_mode": "any",
-    "service_id": null,
+    "service_id": "posobie-rozhdenie",
     "sources": [
       {
         "chunk_id": "2010_200_ukaz-perechen-administrativnykh-procedur_поз-2-6",
@@ -41,6 +41,6 @@
     "enabled": true,
     "author": null,
     "created_at": "2026-11-02T20:38:45+00:00",
-    "updated_at": "2026-11-02T20:38:45+00:00"
+    "updated_at": "2026-11-03T13:47:54+00:00"
   }
 ]

@@ -110,3 +110,44 @@ def test_empty_corpus_does_not_block_matching(tmp_path: Path) -> None:
     """Без корпуса судить о редкости не по чему — не блокируем (но источник всё равно проверяется)."""
     store = TaughtStore(tmp_path / "a.json", [])
     assert store.is_distinctive("ребенка") is True
+
+# --- защита от перехвата чужих вопросов -------------------------------------
+
+
+def test_service_bound_answer_requires_routed_service(store: TaughtStore) -> None:
+    """Привязанный ответ не срабатывает, если вопрос не про эту услугу.
+
+    Реальный баг: «какие документы нужны для получения паспорта» отдавало
+    документы для пособия при рождении — только потому, что в вопросе была
+    фраза «какие документы».
+    """
+    store.create(
+        _payload(["какие документы"], question="какие документы для пособия")
+        .model_copy(update={"service_id": "posobie-rozhdenie"})
+    )
+    # Вопрос распознан как вопрос другой услуги — не наше дело.
+    assert store.match("какие документы нужны для паспорта", routed_services=["drugoe"]) is None
+    # Маршрут пуст (вопрос вообще не про наши услуги) — тоже не срабатываем.
+    assert store.match("какие документы нужны для паспорта") is None
+    # А вопрос про свою услугу — срабатывает.
+    assert store.match("какие документы", routed_services=["posobie-rozhdenie"]) is not None
+
+
+def test_generic_keywords_without_service_never_trigger(store: TaughtStore) -> None:
+    """Общий триггер без привязки к услуге не срабатывает вообще."""
+    store.create(_payload(["какие документы", "где получить"]))
+    assert store.match("какие документы нужны", routed_services=["chto-ugodno"]) is None
+
+
+def test_keywords_are_generic_detection() -> None:
+    assert TaughtStore.keywords_are_generic(["какие документы", "где получить"]) is True
+    assert TaughtStore.keywords_are_generic(["какие документы", "погребение"]) is False
+    assert TaughtStore.keywords_are_generic(["второго ребёнка"]) is False
+    assert TaughtStore.keywords_are_generic([]) is True
+
+
+def test_multiphrase_distinctiveness_uses_words_not_whole_string(store: TaughtStore) -> None:
+    """Фраза «какие документы» не должна считаться редкой из-за стемминга целиком."""
+    # Слов, которых в корпусе нет вовсе, недостаточно для «редкости»:
+    # отсутствие слова — это не доказательство специфичности.
+    assert store.is_distinctive("какие нужно") is False

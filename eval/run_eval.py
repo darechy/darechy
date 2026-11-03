@@ -44,6 +44,14 @@ def judge(case: dict, response: dict) -> tuple[bool, str]:
         return False, "должен был отказаться, но ответил"
     if response.get("refusal"):
         return False, "ложный отказ"
+    # Проверка содержимого ответа: без неё «заявление» на вопрос «что оформлять»
+    # проходил как успех, хотя пользы в нём нет.
+    expected_answer = case.get("expected_answer_contains") or []
+    answer_lower = response.get("answer", "").lower()
+    for needle in expected_answer:
+        if needle.lower() not in answer_lower:
+            return False, f"в ответе нет «{needle}»"
+
     expected_citation = case.get("expected_citation_contains")
     if expected_citation and expected_citation not in citations_text:
         return False, f"цитата не содержит «{expected_citation}»"

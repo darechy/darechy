@@ -29,12 +29,13 @@ _EMBED_BATCH = 16
 
 # Пороги релевантности = guardrail «нет источника → отказ».
 # Числа подобраны свипом (`python -m scripts.tune_gate`) на 14 размеченных
-# вопросах и 7 заведомо внешних. На корпусе из пунктов порог косинуса
-# критичен: при 0.55 точность 71%, при 0.65 — 93% (группировка статей
-# включена). BM25-порог слабо влияет на точность, но держит внешние вопросы:
-# они дают BM25 = 0.00 (нет ни одного общего слова).
+# вопросах и 7 заведомо внешних. Порог 0.65 был подобран на корпусе из одного
+# закона и перестал работать с добавлением перечня позиций: у позиций косинус
+# 0.56–0.59, и порог срезал верные ответы. Проверять на текущем корпусе, а не
+# переносить числа с прошлого — свип для этого и лежит в репозитории.
+# BM25-порог держит внешние вопросы: они дают ровно 0.00.
 DEFAULT_MIN_BM25 = 1.0
-DEFAULT_MIN_COSINE = 0.65
+DEFAULT_MIN_COSINE = 0.55
 
 _TOKEN_RE = re.compile(r"[\w]+", re.UNICODE)
 
@@ -162,12 +163,17 @@ class ChunkStore:
 
     # --- dense-плечо (Qdrant REST) -----------------------------------------
 
-    def _ensure_collection(self, embedding_dim: int) -> bool:
+    def _ensure_collection(self, embedding_dim: int, recreate: bool = True) -> bool:
         """Создаёт коллекцию под нужную размерность. False — Qdrant недоступен.
 
-        Если коллекция уже есть с другой размерностью — это не «мелкий шум»:
-        вектора молча не найдутся. Поэтому честно пересоздаём под актуальную
-        модель эмбеддингов.
+        `recreate=True` (при индексации) удаляет коллекцию и создаёт заново.
+        Это обязательно: id точки — uuid5 от chunk_id, и после переименования
+        чанков старые векторы остаются в коллекции навсегда. Замерено: после
+        смены префикса id в коллекции лежало 455 точек вместо 180, и dense
+        выдавал в том числе несуществующие уже чанки.
+
+        Если коллекция есть с другой размерностью — тоже пересоздаём: вектора
+        другой размерности молча не находятся.
         """
         if not self._qdrant_url:
             return False
@@ -178,13 +184,14 @@ class ChunkStore:
         except httpx.HTTPError:
             return False
 
-        if exists:
+        if exists and not recreate:
             try:
                 size = existing.json()["result"]["config"]["params"]["vectors"]["size"]
             except (KeyError, TypeError, json.JSONDecodeError):
                 size = None
-            if size == embedding_dim:
-                return True
+            return size == embedding_dim
+
+        if exists:
             try:
                 httpx.delete(url, timeout=10.0).raise_for_status()
             except httpx.HTTPError:
@@ -290,7 +297,7 @@ class ChunkStore:
         dense_margin: float = DEFAULT_DENSE_MARGIN,
         min_bm25: float = DEFAULT_MIN_BM25,
         min_cosine: float = DEFAULT_MIN_COSINE,
-        group_articles: bool = True,
+        group_articles: bool = False,
         prefer_chunk_ids: set[str] | None = None,
     ) -> list[RetrievedChunk]:
         """Гибрид BM25 + dense с порогом релевантности.
@@ -311,9 +318,12 @@ class ChunkStore:
 
         `score_threshold` оставлен как более грубый фильтр для совместимости.
 
-        `group_articles`: корпус нарезан на пункты, поэтому после ранжирования
-        пункты сворачиваются в статьи (см. `grouping.py`) — иначе короткие
-        пункты теряют полноту поиска (замер: BM25 падал с 9/14 до 0/14).
+        `group_articles`: сворачивать ли пункты в статьи (см. `grouping.py`).
+        По умолчанию ВЫКЛЮЧЕНО — по замеру на текущем корпусе
+        (`scripts/tune_gate.py`, 14 размеченных вопросов): без группировки
+        71,4% против 64,3% с ней. На корпусе из одного закона группировка
+        помогала, с добавлением перечня позиций и других актов — перестала:
+        параметр оставлен, чтобы это можно было перепроверить, а не верить.
 
         `prefer_chunk_ids`: скоуп по услуге. Если вопрос распознан как вопрос
         о конкретной услуге, искать в первую очередь надо в её актах — иначе
