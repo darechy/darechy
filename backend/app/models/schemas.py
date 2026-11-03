@@ -29,6 +29,17 @@ class Service(BaseModel):
     deadline: str
     checklist: list[ChecklistItem]
     sources: list[Source]
+    # Куда обращаться (орган) и сколько стоит. Поля появились, когда каталог
+    # начал собираться из перечня административных процедур (Указ № 200):
+    # в позиции перечня эти два блока заполнены всегда, терять их нельзя.
+    # Синхронно с frontend/src/api.ts.
+    authority: str = ""
+    cost: str = ""
+    # Статус карточки: черновик (сгенерирована, ждёт ревью) | проверена.
+    # На портал черновики не отдаются.
+    status: str = "проверена"
+    # Триггеры для ИИ-роутера: по ним вопрос сопоставляется с услугой.
+    keywords: list[str] = Field(default_factory=list)
 
 
 class Situation(BaseModel):

@@ -26,7 +26,7 @@ BACKEND_DIR = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(BACKEND_DIR))
 
 from app.core.config import get_settings  # noqa: E402
-from app.kb.corpus import chunk_article  # noqa: E402
+from app.kb.corpus import _ARTICLE_HEAD, chunk_article  # noqa: E402
 from app.kb.models import Chunk  # noqa: E402
 
 
@@ -37,10 +37,18 @@ def rechunk_doc(path: Path, status: str) -> tuple[dict, list[str]]:
     errors: list[str] = []
 
     for chunk in original["chunks"]:
+        # Разбираем только статьи: у перечней и постановлений структура другая,
+        # и повторный прогон по ним ломает готовые чанки (появились id вида
+        # «..._st-статья» с дублями). Такие файлы пропускаем целиком.
+        if not _ARTICLE_HEAD.match(chunk["text"].strip()):
+            continue
         article_hint = chunk.get("location", {}).get("article")
         report = chunk_article(
             chunk["text"],
-            doc_prefix=chunk["chunk_id"].rsplit("_st-", 1)[0],
+            # Префикс берём из ИМЕНИ ФАЙЛА, а не из старого chunk_id: иначе
+            # остаётся прежний короткий префикс («7-Z») и id вида
+            # «7-Z_st-11_п-2» может столкнуться с другим актом того же номера.
+            doc_prefix=path.stem,
             article_hint=article_hint,
             status=status,
         )
@@ -48,6 +56,10 @@ def rechunk_doc(path: Path, status: str) -> tuple[dict, list[str]]:
             errors.extend(f"{chunk['chunk_id']}: {error}" for error in report.errors)
             continue
         chunks.extend(report.chunks)
+
+    if not chunks:
+        # Файл без статей (перечень, постановление) — не наш режим, не трогаем.
+        return original, ["пропущено: нет статей‑структуры"]
 
     payload = {"doc": original["doc"], "chunks": [c.model_dump(mode="json") for c in chunks]}
     return payload, errors
@@ -71,9 +83,9 @@ def main() -> None:
                 f"медиана {sorted(sizes)[len(sizes) // 2]} / max {max(sizes)}"
             )
         if errors:
-            print("  ОШИБКИ:")
-            for error in errors:
-                print(f"    {error}")
+            # «пропущено» — не ошибка: файл другой структуры.
+            tag = "пропуск" if all(e.startswith("пропущено") for e in errors) else "ОШИБКИ"
+            print(f"  {tag}: {'; '.join(errors)}")
             continue
         print("  целостность: склейка пунктов == исходная статья (ok)")
         if args.write:
