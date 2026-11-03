@@ -24,6 +24,10 @@ from app.kb.models import CuratedDoc
 
 KNOWN_STATUSES = {"проверен", "восстановлен", "разобран"}
 MIN_CHUNK_CHARS = 10
+# Слишком крупный чанк — признак того, что разборщик не понял структуру акта:
+# один «пункт» всосал полдокумента. Такой чанк и в промпт не влезет, и в
+# поиске будет вытеснять точные фрагменты. Лучше поймать это валидатором.
+MAX_CHUNK_CHARS = 15000
 
 
 def validate_doc(path: Path) -> list[str]:
@@ -57,6 +61,11 @@ def validate_doc(path: Path) -> list[str]:
             errors.append(f"{chunk.chunk_id}: не заполнено location (статья/пункт)")
         if len(chunk.text.strip()) < MIN_CHUNK_CHARS:
             errors.append(f"{chunk.chunk_id}: текст короче {MIN_CHUNK_CHARS} символов")
+        if len(chunk.text) > MAX_CHUNK_CHARS:
+            errors.append(
+                f"{chunk.chunk_id}: чанк {len(chunk.text)} знаков — больше "
+                f"{MAX_CHUNK_CHARS}, разбор не понял структуру акта"
+            )
         if chunk.status not in KNOWN_STATUSES:
             errors.append(f"{chunk.chunk_id}: неизвестный статус «{chunk.status}»")
 

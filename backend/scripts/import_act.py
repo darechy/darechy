@@ -30,12 +30,51 @@ sys.path.insert(0, str(BACKEND_DIR))
 
 from app.core.config import get_settings  # noqa: E402
 from app.kb.corpus import build_curated_doc, build_flat_act  # noqa: E402
-from app.kb.models import CuratedDoc  # noqa: E402
+from app.kb.models import Chunk, CuratedDoc  # noqa: E402
 from app.kb.positions import DEFAULT_POSITIONS, extract_positions  # noqa: E402
+from app.kb.validate import MAX_CHUNK_CHARS  # noqa: E402
 
 
 def _prefix(path: Path) -> str:
     return path.stem
+
+
+def split_oversized(chunks: list[Chunk], limit: int = MAX_CHUNK_CHARS) -> tuple[list[Chunk], int]:
+    """Дробит слишком крупные чанки по абзацам, не теряя текст.
+
+    Зачем: у постановлений приложения — это бланки на десятки тысяч знаков.
+    Один такой «пункт» и в промпт не влезет, и в поиске вытеснит точные нормы.
+    Дробим по границам абзацев и нумеруем части; location сохраняется.
+    """
+    result: list[Chunk] = []
+    split_count = 0
+    for chunk in chunks:
+        if len(chunk.text) <= limit:
+            result.append(chunk)
+            continue
+        parts: list[str] = []
+        current = ""
+        for paragraph in chunk.text.split("\n\n"):
+            if current and len(current) + len(paragraph) + 2 > limit:
+                parts.append(current.strip())
+                current = paragraph
+            else:
+                current = f"{current}\n\n{paragraph}" if current else paragraph
+        if current.strip():
+            parts.append(current.strip())
+
+        for index, part in enumerate(parts, start=1):
+            result.append(
+                chunk.model_copy(
+                    update={
+                        "chunk_id": f"{chunk.chunk_id}-ч{index}",
+                        "text": part,
+                        "title": f"{chunk.title or chunk.chunk_id} (часть {index})",
+                    }
+                )
+            )
+        split_count += 1
+    return result, split_count
 
 
 def _write(doc: CuratedDoc, raw_path: Path, out_dir: Path) -> Path:
@@ -54,6 +93,11 @@ def main() -> None:
     parser.add_argument("--mode", choices=("articles", "flat", "positions"), default="articles")
     parser.add_argument("--status", default="восстановлен")
     parser.add_argument("--dry-run", action="store_true")
+    parser.add_argument(
+        "--all-positions",
+        action="store_true",
+        help="режим positions: брать все позиции файла, а не только пособийные",
+    )
     args = parser.parse_args()
 
     settings = get_settings()
@@ -61,7 +105,13 @@ def main() -> None:
     prefix = _prefix(args.raw_file)
 
     if args.mode == "positions":
-        chunks, missing = extract_positions(raw, DEFAULT_POSITIONS, doc_prefix=prefix, status=args.status)
+        numbers = DEFAULT_POSITIONS
+        if args.all_positions:
+            from app.kb.positions import split_positions
+
+            numbers = tuple(span.number for span in split_positions(raw))
+            print(f"  позиций в файле: {len(numbers)}")
+        chunks, missing = extract_positions(raw, numbers, doc_prefix=prefix, status=args.status)
         if missing:
             print("⚠ не найдено:", "; ".join(missing))
         doc_meta, _title, _ = __import__("app.kb.corpus", fromlist=["parse_act_markdown"]).parse_act_markdown(raw)
@@ -81,6 +131,12 @@ def main() -> None:
         if doc is None:
             print("✗", "; ".join(errors))
             sys.exit(1)
+
+    doc = doc.model_copy(update={"chunks": split_oversized(list(doc.chunks))[0]}) if False else doc
+    chunks_split, oversized = split_oversized(list(doc.chunks))
+    doc = doc.model_copy(update={"chunks": chunks_split})
+    if oversized:
+        print(f"  крупных чанков раздроблено: {oversized}")
 
     sizes = [len(c.text) for c in doc.chunks]
     print(f"{args.raw_file.name} → режим {args.mode}")

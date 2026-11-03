@@ -120,16 +120,55 @@ class ServiceCatalogStore:
             return True
 
     def set_situation_title(self, situation_id: str, title: str) -> None:
-        """Заголовки жизненных ситуаций — отдельный маленький файл."""
+        self.upsert_situation(situation_id, title=title)
+
+    def upsert_situation(
+        self,
+        situation_id: str,
+        title: str | None = None,
+        service_ids: list[str] | None = None,
+        note: str | None = None,
+    ) -> dict:
+        """Правит жизненную ситуацию: название, состав услуг, пояснение.
+
+        Явный список услуг делает ситуацию **сквозной**: одна ситуация собирает
+        услуги из разных актов (регистрация рождения в ЗАГСе + пособия).
+        """
         path = self.path.with_name("situations.json")
-        payload: dict[str, str] = {}
+        payload: dict = {}
         if path.exists():
             try:
                 payload = json.loads(path.read_text(encoding="utf-8"))
             except json.JSONDecodeError:
                 payload = {}
-        payload[situation_id] = title
+
+        current = payload.get(situation_id)
+        entry = dict(current) if isinstance(current, dict) else (
+            {"title": current} if isinstance(current, str) else {}
+        )
+        if title is not None:
+            entry["title"] = title
+        if service_ids is not None:
+            entry["service_ids"] = service_ids
+        if note is not None:
+            entry["note"] = note
+        payload[situation_id] = entry
         path.write_text(json.dumps(payload, ensure_ascii=False, indent=2), encoding="utf-8")
+        return entry
+
+    def delete_situation(self, situation_id: str) -> bool:
+        path = self.path.with_name("situations.json")
+        if not path.exists():
+            return False
+        try:
+            payload = json.loads(path.read_text(encoding="utf-8"))
+        except json.JSONDecodeError:
+            return False
+        if situation_id not in payload:
+            return False
+        payload.pop(situation_id)
+        path.write_text(json.dumps(payload, ensure_ascii=False, indent=2), encoding="utf-8")
+        return True
 
     def situation_titles(self) -> dict[str, str]:
         path = self.path.with_name("situations.json")

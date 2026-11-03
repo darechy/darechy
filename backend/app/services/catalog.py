@@ -64,35 +64,66 @@ class Catalog:
         return next((s for s in self.all() if s.id == service_id), None)
 
     def situations(self) -> list[Situation]:
-        """Жизненные ситуации из услуг + правки названий из situations.json.
+        """Жизненные ситуации. Состав и названия правятся файлом situations.json.
 
-        Названия редактируются данными: админка пишет файл, портал его читает.
-        Так новая категория не требует правки кода.
+        Два режима, и оба нужны:
+        - **по услугам** (по умолчанию): ситуация = группа услуг с тем же `situation`;
+        - **сквозная ситуация**: в файле задан явный список `service_ids`, и тогда
+          одна ситуация собирает услуги из разных актов и категорий. Пример:
+          «Родился ребёнок» = регистрация рождения в ЗАГСе (Указ № 200) + три
+          пособия (Закон № 7-З). Это и есть маршрут, который видит человек.
+
+        Черновики в ситуации не попадают: их ещё не проверил человек.
         """
-        titles = {**SITUATION_TITLES, **self._titles_from_file()}
+        explicit = self._situations_from_file()
+        services = {s.id: s for s in self.all() if s.status != "черновик"}
+
+        result: list[Situation] = []
+        covered: set[str] = set()
+
+        for sid, config in explicit.items():
+            ids = [sid_ for sid_ in config.get("service_ids", []) if sid_ in services]
+            if not ids:
+                continue
+            covered.update(ids)
+            result.append(
+                Situation(
+                    id=sid,
+                    title=config.get("title") or SITUATION_TITLES.get(sid, sid),
+                    service_ids=ids,
+                )
+            )
+
+        # Остальные услуги группируем по своей ситуации, чтобы ничего не пропало.
         by_situation: dict[str, list[str]] = {}
-        for service in self.all():
-            # Черновики на портал не попадают — их ещё не проверил человек.
-            if service.status == "черновик":
+        for service in services.values():
+            if service.id in covered:
                 continue
             by_situation.setdefault(service.situation, []).append(service.id)
-        return [
-            Situation(
-                id=sid,
-                title=titles.get(sid, sid),
-                service_ids=service_ids,
-            )
-            for sid, service_ids in by_situation.items()
-        ]
+        for sid, ids in by_situation.items():
+            title = explicit.get(sid, {}).get("title") or SITUATION_TITLES.get(sid, sid)
+            result.append(Situation(id=sid, title=title, service_ids=ids))
 
-    def _titles_from_file(self) -> dict[str, str]:
+        return result
+
+    def _situations_from_file(self) -> dict[str, dict]:
+        """Читает situations.json. Поддерживает и старый формат «id: заголовок»."""
         path = self._services_file.with_name("situations.json")
         if not path.exists():
             return {}
         try:
-            return json.loads(path.read_text(encoding="utf-8"))
+            payload = json.loads(path.read_text(encoding="utf-8"))
         except json.JSONDecodeError:
             return {}
+        if not isinstance(payload, dict):
+            return {}
+        normalized: dict[str, dict] = {}
+        for key, value in payload.items():
+            if isinstance(value, str):
+                normalized[key] = {"title": value}
+            elif isinstance(value, dict):
+                normalized[key] = value
+        return normalized
 
 
 def build_catalog(settings: Settings) -> Catalog:

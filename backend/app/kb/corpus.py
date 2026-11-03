@@ -167,6 +167,57 @@ def chunk_article(
     return ChunkingReport(chunks=chunks, errors=[])
 
 
+_TOC_LINE_RE = re.compile(r"(?m)^\s*(СОДЕРЖАНИЕ|ОГЛАВЛЕНИЕ)\s*$")
+
+
+def _drop_table_of_contents(raw: str) -> str:
+    """Убирает оглавление акта: это не нормы, а список статей.
+
+    В выгрузках портала (Кодекс о браке и семье) есть блок «СОДЕРЖАНИЕ» —
+    однострочные упоминания статей. Разборщик принимал их за статьи, и в
+    корпусе появлялись дубли: «статья 193» из оглавления и настоящая.
+    Тело начинается там, где после строки «Статья N.» идёт ещё текст.
+    """
+    match = _TOC_LINE_RE.search(raw)
+    if not match:
+        return raw
+    lines = raw[match.end() :].splitlines()
+    for index, line in enumerate(lines):
+        if not re.match(r"^\s*Статья\s+\d+", line):
+            continue
+        rest = [next_line for next_line in lines[index + 1 : index + 4] if next_line.strip()]
+        if rest:
+            # Настоящая статья: за заголовком идёт текст нормы.
+            return raw[: match.start()] + "\n".join(lines[index:])
+    return raw[: match.start()]
+
+
+def dedupe_chunk_ids(chunks: list[Chunk]) -> list[Chunk]:
+    """Делает chunk_id уникальными, сохраняя порядок и текст.
+
+    Нумерация пунктов в постановлениях начинается заново в каждом приложении,
+    поэтому одинаковые номера дают одинаковые id. Валидатор это ловит; здесь
+    добавляем суффикс, а не выбрасываем норму.
+    """
+    seen: dict[str, int] = {}
+    result: list[Chunk] = []
+    for chunk in chunks:
+        count = seen.get(chunk.chunk_id, 0) + 1
+        seen[chunk.chunk_id] = count
+        if count == 1:
+            result.append(chunk)
+        else:
+            result.append(
+                chunk.model_copy(
+                    update={
+                        "chunk_id": f"{chunk.chunk_id}-{count}",
+                        "title": f"{chunk.title or chunk.chunk_id} (повтор {count})",
+                    }
+                )
+            )
+    return result
+
+
 def parse_act_markdown(raw: str) -> tuple[dict, str, list[str]]:
     """Разбирает markdown-выгрузку акта на реквизиты и статьи.
 
@@ -184,7 +235,7 @@ def parse_act_markdown(raw: str) -> tuple[dict, str, list[str]]:
         match = _ACT_HEAD.match(first.lstrip("# ").strip())
         title = match.group("name") if match else first.strip("# ").strip()
 
-    body = raw
+    body = _drop_table_of_contents(raw)
     marker = "\n---\n"
     if marker in raw:  # шапка отделена от текста разделителем
         body = raw.split(marker, 1)[1]
@@ -230,7 +281,9 @@ def build_curated_doc(raw: str, doc_prefix: str, status: str = "восстано
         return None, ["ни одного пункта не разобрано"]
 
     try:
-        return CuratedDoc.model_validate({"doc": doc_meta, "chunks": [c.model_dump() for c in chunks]}), []
+        return CuratedDoc.model_validate(
+            {"doc": doc_meta, "chunks": [c.model_dump() for c in dedupe_chunk_ids(chunks)]}
+        ), []
     except ValueError as exc:
         return None, [f"схема не приняла документ: {exc}"]
 
@@ -281,7 +334,7 @@ def build_flat_act(
 
     try:
         return CuratedDoc.model_validate(
-            {"doc": doc_meta, "chunks": [c.model_dump() for c in chunks]}
+            {"doc": doc_meta, "chunks": [c.model_dump() for c in dedupe_chunk_ids(chunks)]}
         ), []
     except ValueError as exc:
         return None, [f"схема не приняла документ: {exc}"]

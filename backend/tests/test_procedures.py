@@ -157,3 +157,49 @@ def test_draft_store_persists(tmp_path) -> None:
     path = tmp_path / "drafts.json"
     DraftStore(path).merge([_draft(tmp_path)])
     assert len(DraftStore(path).all()) == 1
+
+
+# --- сквозные жизненные ситуации --------------------------------------------
+
+
+def test_cross_cutting_situation_collects_services_from_different_acts(tmp_path) -> None:
+    """Ситуация может собирать услуги из разных актов и категорий.
+
+    «Родился ребёнок» = регистрация рождения в ЗАГСе (перечень, Указ № 200)
+    + три пособия (Закон № 7-З). Это маршрут, который видит человек.
+    """
+    import json
+
+    from app.services.catalog import Catalog
+
+    services_file = tmp_path / "services.json"
+    raw = [
+        {"id": "p5-1", "title": "Регистрация рождения", "situation": "registraciya-aktov"},
+        {"id": "posobie", "title": "Пособие при рождении", "situation": "rozhdenie-rebenka"},
+        {"id": "chernovik", "title": "Черновик", "situation": "rozhdenie-rebenka",
+         "status": "черновик"},
+    ]
+    payload = []
+    for item in raw:
+        base = {
+            "situation": "x", "summary": "", "who": "", "amount": "", "deadline": "",
+            "checklist": [], "sources": [],
+        }
+        payload.append({**base, **item})
+    services_file.write_text(json.dumps(payload, ensure_ascii=False), encoding="utf-8")
+
+    (tmp_path / "situations.json").write_text(json.dumps({
+        "rozhdenie-rebenka": {
+            "title": "Родился ребёнок",
+            "service_ids": ["p5-1", "posobie"],
+        }
+    }, ensure_ascii=False), encoding="utf-8")
+
+    situations = {s.id: s for s in Catalog(services_file).situations()}
+    assert situations["rozhdenie-rebenka"].title == "Родился ребёнок"
+    assert situations["rozhdenie-rebenka"].service_ids == ["p5-1", "posobie"]
+    # Черновик не попадает ни в одну ситуацию: его ещё не проверил человек.
+    for situation in situations.values():
+        assert "chernovik" not in situation.service_ids
+    # А обе утверждённые услуги на месте — из разных актов, в одной ситуации.
+    assert set(situations["rozhdenie-rebenka"].service_ids) == {"p5-1", "posobie"}

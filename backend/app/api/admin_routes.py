@@ -319,6 +319,45 @@ def service_delete(service_id: str, _: Settings = Depends(require_admin)) -> dic
     return {"deleted": service_id}
 
 
+@admin_router.get("/situations")
+def situations_admin_list(request: Request, _: Settings = Depends(require_admin)) -> list[dict]:
+    """Ситуации так, как их увидит портал, плюс черновики в стороне."""
+    catalog = getattr(request.app.state, "catalog", None)
+    if catalog is None:
+        raise HTTPException(status_code=503, detail={"reason": "каталог не инициализирован"})
+    situations = {
+        situation.id: {
+            "id": situation.id,
+            "title": situation.title,
+            "service_ids": situation.service_ids,
+        }
+        for situation in catalog.situations()
+    }
+    for sid, config in _catalog_store(get_settings()).situation_titles().items():
+        if sid not in situations:
+            situations[sid] = {
+                "id": sid,
+                "title": config.get("title", sid) if isinstance(config, dict) else str(config),
+                "service_ids": config.get("service_ids", []) if isinstance(config, dict) else [],
+            }
+    return list(situations.values())
+
+
+@admin_router.post("/situations/{situation_id}")
+def situation_save(
+    situation_id: str,
+    _: Settings = Depends(require_admin),
+    title: str | None = Query(default=None),
+    note: str | None = Query(default=None),
+    service_ids: list[str] | None = Query(default=None, description="состав услуг (сквозная ситуация)"),
+) -> dict:
+    """Правит ситуацию: название и состав услуг. Сквозная ситуация — это явный список."""
+    entry = _catalog_store(get_settings()).upsert_situation(
+        situation_id, title=title, service_ids=service_ids, note=note
+    )
+    return {"saved": entry}
+
+
 @admin_router.get("/chunks")
 def chunks_for_picker(
     request: Request,
