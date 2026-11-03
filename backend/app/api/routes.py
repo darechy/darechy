@@ -23,13 +23,16 @@ api_router = APIRouter(prefix="/api")
 
 @api_router.get("/services")
 def list_services(catalog: Catalog = Depends(get_catalog)) -> list[dict]:
-    return [s.model_dump() for s in catalog.all()]
+    """Каталог услуг. Черновики не отдаём: карточка ждёт проверки человеком."""
+    return [
+        s.model_dump() for s in catalog.all() if s.status != "черновик"
+    ]
 
 
 @api_router.get("/services/{service_id}")
 def get_service(service_id: str, catalog: Catalog = Depends(get_catalog)) -> dict:
     service = catalog.get(service_id)
-    if service is None:
+    if service is None or service.status == "черновик":
         raise HTTPException(status_code=404, detail="Услуга не найдена")
     return service.model_dump()
 

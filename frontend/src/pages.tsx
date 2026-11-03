@@ -5,6 +5,7 @@ import type { Service } from './api';
 import { AppCtx } from './context';
 import type { AsyncState } from './hooks';
 import { EXAMPLES, SITUATIONS, useT } from './i18n';
+import { isPublished } from './api';
 import { Icon, situationIcon } from './icons';
 
 export function Status({ state }: { state: AsyncState<unknown> }) {
@@ -270,18 +271,39 @@ function ServiceView({ service }: { service: Service }) {
       </header>
 
       <dl className='facts'>
-        <div>
-          <dt>{t('who')}</dt>
-          <dd>{service.who}</dd>
-        </div>
-        <div>
-          <dt>{t('amount')}</dt>
-          <dd>{service.amount}</dd>
-        </div>
-        <div>
-          <dt>{t('deadline')}</dt>
-          <dd>{service.deadline}</dd>
-        </div>
+        {/* Поля из перечня административных процедур: у сгенерированных
+            карточек они заполнены всегда, у «кто имеет право» может быть
+            пусто — пустые блоки не показываем, чтобы не было прочерков. */}
+        {service.who && (
+          <div>
+            <dt>{t('who')}</dt>
+            <dd>{service.who}</dd>
+          </div>
+        )}
+        {service.amount && (
+          <div>
+            <dt>{t('amount')}</dt>
+            <dd>{service.amount}</dd>
+          </div>
+        )}
+        {service.deadline && (
+          <div>
+            <dt>{t('deadline')}</dt>
+            <dd>{service.deadline}</dd>
+          </div>
+        )}
+        {service.authority && (
+          <div>
+            <dt>{t('authority')}</dt>
+            <dd>{service.authority}</dd>
+          </div>
+        )}
+        {service.cost && (
+          <div>
+            <dt>{t('cost')}</dt>
+            <dd>{service.cost}</dd>
+          </div>
+        )}
       </dl>
 
       <div className='cols'>
@@ -352,7 +374,9 @@ export function ServicePage({ id }: { id: string }) {
       </section>
     );
   }
-  const service = services.data.find((s) => s.id === id);
+  // Черновики (status === 'черновик') на портал не показываем: карточка
+  // считается черновиком до проверки человеком.
+  const service = services.data.find((s) => s.id === id && isPublished(s));
   return service ? <ServiceView service={service} /> : <NotFound />;
 }
 
