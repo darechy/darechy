@@ -236,9 +236,15 @@ class Orchestrator:
         # ИИ-слой: правила отвечают, когда уверены; при неоднозначности
         # арбитром выступает LLM. Результат ещё и ограничивает поиск актами
         # выбранной услуги — иначе вопрос про документы тянет чужие процедуры.
+        route_started = time.perf_counter()
         routed, routed_by = self._route(request.message)
+        route_ms = int((time.perf_counter() - route_started) * 1000)
         suggested = routed
-        prefer_ids = self.router.scope_chunk_ids(routed) if self.router else set()
+        prefer_ids = (
+            self.router.scope_chunk_ids(routed)
+            if self.router and self.settings.service_scoping
+            else set()
+        )
 
         # Слой доучивания: ответ, подтверждённый администратором, важнее
         # генерации. Отвечает мгновенно и не зависит от качества модели, но
@@ -269,6 +275,7 @@ class Orchestrator:
 
         # Guardrail №1: нет релевантных чанков → отказ. Порог применяется
         # к сырым скорам плеч внутри store.search (RRF-скор — ранговый).
+        search_started = time.perf_counter()
         hits = self.store.search(
             query,
             self.llm,
@@ -276,13 +283,20 @@ class Orchestrator:
             score_threshold=self.settings.retrieval_score_threshold,
             prefer_chunk_ids=prefer_ids or None,
         )
+        search_ms = int((time.perf_counter() - search_started) * 1000)
         if not hits:
             self._remember(request, None)
             return self._done(REFUSAL_TEMPLATE, [], refusal=True,
                               suggested=suggested, started=started)
 
+        llm_started = time.perf_counter()
         llm_answer = self.llm.chat(
             SYSTEM_PROMPT, self._build_context(request, hits, history)
+        )
+        llm_ms = int((time.perf_counter() - llm_started) * 1000)
+        logger.info(
+            "Маршрут: %s (%s, %d мс) | поиск: %d чанков (%d мс) | модель: %d мс",
+            routed or "—", routed_by, route_ms, len(hits), search_ms, llm_ms,
         )
 
         if llm_answer is None:
@@ -347,6 +361,8 @@ class Orchestrator:
             return [], "none"
         route_with_ai = getattr(self.router, "route_with_ai", None)
         if route_with_ai is None:  # роутер-двойка в тестах без ИИ
+            return self.router.route(message), "rules"
+        if not self.settings.ai_router:
             return self.router.route(message), "rules"
         return route_with_ai(message)
 

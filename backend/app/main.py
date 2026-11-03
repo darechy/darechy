@@ -63,6 +63,12 @@ async def lifespan(app: FastAPI):
         taught=app.state.taught,
     )
 
+    # Прогрев моделей: первый запрос после простоя платит за загрузку весов
+    # (замерено: 11,6 с против 3,5 с на прогретом). На демо это выглядело бы
+    # как «ассистент тормозит» на первом же вопросе.
+    if settings.warmup_on_start:
+        _warmup(llm)
+
     bot_result = build_bot(settings, app.state.orchestrator, app.state.voice)
     app.state.bot = None
     if bot_result:
@@ -70,6 +76,16 @@ async def lifespan(app: FastAPI):
         app.state.bot = bot
         app.state.dp = dp
     yield
+
+
+def _warmup(llm) -> None:
+    """Грузит модель генерации и эмбеддингов в память до первого запроса."""
+    try:
+        llm.embed("прогрев")
+        llm.chat("Ответь одним словом.", "прогрев", max_tokens=1)
+        logger.info("Модели прогреты")
+    except Exception as exc:  # прогрев не критичен: сервис работает и без него
+        logger.warning("Прогрев не удался: %s", exc)
 
 
 def _make_llm(settings):
