@@ -20,7 +20,7 @@ import httpx
 from app.kb.models import Chunk, RetrievedChunk
 from app.llm.client import LlmClient
 from app.retrieval.fusion import DEFAULT_DENSE_MARGIN, fuse_rankings
-from app.retrieval.grouping import group_by_article
+from app.retrieval.grouping import article_key, group_by_article
 
 _COLLECTION = "darechy"
 # Qdrant принимает только unsigned int или UUID как id точки — маппим chunk_id.
@@ -37,6 +37,25 @@ DEFAULT_MIN_BM25 = 1.0
 DEFAULT_MIN_COSINE = 0.65
 
 _TOKEN_RE = re.compile(r"[\w]+", re.UNICODE)
+
+def _scope_by_articles(
+    bm25: list[RetrievedChunk],
+    dense: list[RetrievedChunk],
+    prefer_chunk_ids: set[str],
+) -> tuple[list[RetrievedChunk], list[RetrievedChunk]] | None:
+    """Оставляет хиты, чья статья входит в статьи-источники услуги.
+
+    None — в скоупе пусто, скоуп не применяем (мягкое ограничение).
+    """
+    allowed = {article_key(cid) for cid in prefer_chunk_ids}
+    if not allowed:
+        return None
+    bm25_scoped = [h for h in bm25 if article_key(h.chunk.chunk_id) in allowed]
+    dense_scoped = [h for h in dense if article_key(h.chunk.chunk_id) in allowed]
+    if not bm25_scoped and not dense_scoped:
+        return None
+    return bm25_scoped, dense_scoped
+
 
 # Минимальный стоп-набор: предлоги/союзы, убивающие BM25 на длинных вопросах.
 _STOP_WORDS = {
@@ -272,6 +291,7 @@ class ChunkStore:
         min_bm25: float = DEFAULT_MIN_BM25,
         min_cosine: float = DEFAULT_MIN_COSINE,
         group_articles: bool = True,
+        prefer_chunk_ids: set[str] | None = None,
     ) -> list[RetrievedChunk]:
         """Гибрид BM25 + dense с порогом релевантности.
 
@@ -294,6 +314,12 @@ class ChunkStore:
         `group_articles`: корпус нарезан на пункты, поэтому после ранжирования
         пункты сворачиваются в статьи (см. `grouping.py`) — иначе короткие
         пункты теряют полноту поиска (замер: BM25 падал с 9/14 до 0/14).
+
+        `prefer_chunk_ids`: скоуп по услуге. Если вопрос распознан как вопрос
+        о конкретной услуге, искать в первую очередь надо в её актах — иначе
+        «какие документы нужны» тянет документы из чужих процедур. Скоуп
+        мягкий: если в нём ничего не нашлось, возвращаемся к поиску по всему
+        корпусу, чтобы не отдать отказ на нормальный вопрос.
         """
         bm25_hits = [
             h
@@ -305,6 +331,11 @@ class ChunkStore:
             for h in self.search_dense(query, llm, top_k=top_k * 2)
             if h.score >= max(score_threshold, min_cosine)
         ]
+        if prefer_chunk_ids:
+            scoped = _scope_by_articles(bm25_hits, dense_hits, prefer_chunk_ids)
+            if scoped is not None:
+                bm25_hits, dense_hits = scoped
+
         fused = fuse_rankings(bm25_hits, dense_hits, top_k=0, margin=dense_margin)
         if group_articles:
             return group_by_article(fused)[:top_k]

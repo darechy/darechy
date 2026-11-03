@@ -233,7 +233,12 @@ class Orchestrator:
     def answer(self, request: ChatRequest) -> ChatResponse:
         started = time.perf_counter()
         history = self.sessions.history(request.session_id)
-        suggested = self.router.route(request.message) if self.router else []
+        # ИИ-слой: правила отвечают, когда уверены; при неоднозначности
+        # арбитром выступает LLM. Результат ещё и ограничивает поиск актами
+        # выбранной услуги — иначе вопрос про документы тянет чужие процедуры.
+        routed, routed_by = self._route(request.message)
+        suggested = routed
+        prefer_ids = self.router.scope_chunk_ids(routed) if self.router else set()
 
         # Слой доучивания: ответ, подтверждённый администратором, важнее
         # генерации. Отвечает мгновенно и не зависит от качества модели, но
@@ -269,6 +274,7 @@ class Orchestrator:
             self.llm,
             top_k=request.top_k,
             score_threshold=self.settings.retrieval_score_threshold,
+            prefer_chunk_ids=prefer_ids or None,
         )
         if not hits:
             self._remember(request, None)
@@ -334,6 +340,15 @@ class Orchestrator:
         )
 
     # --- внутреннее ---------------------------------------------------------
+
+    def _route(self, message: str) -> tuple[list[str], str]:
+        """Маршрут услуги и кто решил. Нет роутера — пустой маршрут."""
+        if self.router is None:
+            return [], "none"
+        route_with_ai = getattr(self.router, "route_with_ai", None)
+        if route_with_ai is None:  # роутер-двойка в тестах без ИИ
+            return self.router.route(message), "rules"
+        return route_with_ai(message)
 
     def _taught_answer(self, request: ChatRequest) -> ChatResponse | None:
         """Проверяет слой доучивания. None — выученного ответа нет, идём искать."""

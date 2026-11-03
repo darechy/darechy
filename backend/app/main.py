@@ -59,7 +59,7 @@ async def lifespan(app: FastAPI):
         settings=settings,
         store=store,
         llm=llm,
-        router=ServiceRouter(app.state.catalog.all()),
+        router=ServiceRouter(app.state.catalog.all(), llm=llm),
         taught=app.state.taught,
     )
 

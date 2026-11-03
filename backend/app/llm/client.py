@@ -56,7 +56,10 @@ class LlmClient:
 
     # --- генерация ----------------------------------------------------------
 
-    def chat(self, system_prompt: str, user_prompt: str) -> str | None:
+    def chat(
+        self, system_prompt: str, user_prompt: str, max_tokens: int | None = None
+    ) -> str | None:
+        """Генерация. `max_tokens` — свой потолок длины (роутеру хватает ~20)."""
         try:
             resp = httpx.post(
                 f"{self.base_url}/api/chat",
@@ -74,7 +77,10 @@ class LlmClient:
                     # num_predict — потолок длины ответа. Без него модель на
                     # 1.7b охотно пишет 1500 токенов (~70 с) вместо трёх
                     # предложений: замерено, ответ про пособие занимал 72 с.
-                    "options": {"temperature": 0.1, "num_predict": self.max_new_tokens},
+                    "options": {
+                        "temperature": 0.1,
+                        "num_predict": max_tokens or self.max_new_tokens,
+                    },
                 },
                 timeout=120.0,
             )
