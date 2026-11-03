@@ -14,6 +14,7 @@ from app.core.config import get_settings
 from app.kb.ingest import collect_chunks, load_curated
 from app.retrieval.store import ChunkStore
 from app.services.catalog import build_catalog
+from app.services.draft_store import DraftStore
 from app.voice.gateway import VoiceGateway
 
 logging.basicConfig(level=logging.INFO, format="%(levelname)s %(name)s: %(message)s")
@@ -51,6 +52,10 @@ async def lifespan(app: FastAPI):
     app.state.llm = llm
     app.state.corpus_chunks = chunks
     app.state.taught = TaughtStore(settings.taught_file, chunks)
+    app.state.drafts = DraftStore(settings.drafts_file)
+    draft_stats = app.state.drafts.stats()
+    if draft_stats["total"]:
+        logger.info("Черновиков карточек услуг: %d (ждут ревью)", draft_stats["total"])
     broken = app.state.taught.unknown_sources()
     if broken:
         logger.warning("Выученные ответы со ссылками вне корпуса: %s", broken)

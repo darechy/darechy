@@ -21,7 +21,13 @@ from fastapi import APIRouter, Depends, File, Header, HTTPException, Query, Requ
 from fastapi.responses import HTMLResponse
 
 from app.core.config import BACKEND_DIR, Settings, get_settings
-from app.kb.corpus import build_curated_doc, corpus_inventory
+from app.kb.corpus import (
+    build_curated_doc,
+    corpus_inventory,
+    parse_act_markdown,
+)
+from app.kb.positions import extract_positions
+from app.kb.procedures import parse_sections
 from app.models.schemas import (
     Service,
     TaughtAnswer,
@@ -29,6 +35,7 @@ from app.models.schemas import (
     TaughtAnswerUpdate,
 )
 from app.services.admin_store import ServiceCatalogStore, chunk_options, slug
+from app.services.drafter import PERECHEN_PREFIX, draft_from_procedure
 
 logger = logging.getLogger(__name__)
 
@@ -320,6 +327,165 @@ def chunks_for_picker(
 ) -> list[dict]:
     """Чанки корпуса для выбора источника услуги — по поиску, а не по памяти."""
     return chunk_options(_get_chunks(request), query=q)
+
+
+# --- каталог из перечня административных процедур ---------------------------
+#
+# Смысл: новая категория услуг = новый РАЗДЕЛ перечня, а не новый код.
+# Импорт делает три вещи сразу: разбирает позиции раздела, кладёт их в корпус
+# (иначе у карточек не будет настоящих цитат) и собирает черновики карточек.
+# На портал черновики не попадают: их утверждает человек.
+
+
+@admin_router.get("/sections")
+def sections_list(_: Settings = Depends(require_admin)) -> list[dict]:
+    """Разделы перечня с числом процедур — что можно импортировать."""
+    settings = get_settings()
+    path = _perechen_path(settings)
+    if not path.exists():
+        raise HTTPException(status_code=404, detail={"reason": "файл перечня не найден в kb_corpus/raw"})
+    raw = path.read_text(encoding="utf-8")
+    return [
+        {"name": name, "procedures": len(procedures)}
+        for name, procedures in parse_sections(raw)
+    ]
+
+
+@admin_router.get("/services/drafts")
+def drafts_list(request: Request, _: Settings = Depends(require_admin)) -> dict:
+    """Черновики карточек и сводка по ним."""
+    store = _drafts(request)
+    return {
+        "stats": store.stats(),
+        "items": [draft.model_dump(mode="json") for draft in store.all()],
+    }
+
+
+@admin_router.post("/services/import")
+def services_import(
+    request: Request,
+    section: str | None = Query(default=None, description="раздел перечня; пусто — все"),
+    limit: int = Query(default=0, ge=0, description="0 — без ограничения"),
+    polish: bool = Query(default=False, description="переписать заголовки через ИИ"),
+    _: Settings = Depends(require_admin),
+) -> dict:
+    """Импортирует раздел перечня: позиции в корпус + черновики карточек."""
+    settings = get_settings()
+    path = _perechen_path(settings)
+    if not path.exists():
+        raise HTTPException(status_code=404, detail={"reason": "файл перечня не найден в kb_corpus/raw"})
+
+    raw = path.read_text(encoding="utf-8")
+    sections = parse_sections(raw)
+    if section:
+        wanted = section.strip().upper()
+        sections = [(name, procs) for name, procs in sections if name.upper() == wanted]
+        if not sections:
+            raise HTTPException(status_code=404, detail={"reason": f"раздел «{section}» не найден"})
+
+    procedures = [proc for _name, procs in sections for proc in procs]
+    if limit:
+        procedures = procedures[:limit]
+    if not procedures:
+        raise HTTPException(status_code=422, detail={"reason": "в выбранных разделах нет процедур"})
+
+    # 1. Позиции — в корпус, чтобы у карточек были настоящие цитаты.
+    numbers = tuple(proc.number for proc in procedures)
+    chunks, missing = extract_positions(
+        raw,
+        numbers,
+        doc_prefix=PERECHEN_PREFIX,
+        doc_title="Перечень административных процедур (Указ от 26.04.2010 № 200)",
+    )
+    corpus_note = "позиции не добавлялись"
+    if chunks:
+        known = {chunk.chunk_id for chunk in _get_chunks(request)}
+        fresh = [chunk for chunk in chunks if chunk.chunk_id not in known]
+        if fresh:
+            settings.corpus_dir.mkdir(parents=True, exist_ok=True)
+            target = settings.corpus_dir / f"{PERECHEN_PREFIX}-razdel-{slug(section or 'vse')[:30]}.json"
+            doc_meta, _title, _ = parse_act_markdown(raw)
+            _merge_positions_into_file(target, doc_meta, chunks)
+            corpus_note = f"позиций в корпусе: +{len(fresh)} ({target.name})"
+
+    # 2. Черновики карточек.
+    llm = getattr(request.app.state, "llm", None)
+    drafts = [
+        draft_from_procedure(
+            proc,
+            llm=llm,
+            polish=polish,
+            position_chunk_id=f"{PERECHEN_PREFIX}_поз-{proc.number.replace('.', '-')}",
+        )
+        for proc in procedures
+    ]
+    result = _drafts(request).merge(drafts)
+
+    reindexed = _reindex(request) if chunks else {}
+    logger.info("Импорт раздела %s: %d процедур, черновиков %s", section or "все", len(procedures), result)
+    return {
+        "section": section or "все разделы",
+        "procedures": len(procedures),
+        "corpus": corpus_note,
+        "missing_positions": missing,
+        "drafts": result,
+        "reindex": reindexed,
+    }
+
+
+@admin_router.post("/services/drafts/{draft_id}/approve")
+def draft_approve(
+    draft_id: str, request: Request, _: Settings = Depends(require_admin)
+) -> dict:
+    """Утверждает черновик: переносит в рабочий каталог со статусом «проверена»."""
+    settings = get_settings()
+    store = _drafts(request)
+    draft = store.get(draft_id)
+    if draft is None:
+        raise HTTPException(status_code=404, detail={"reason": f"черновик {draft_id} не найден"})
+
+    approved = draft.model_copy(update={"status": "проверена"})
+    _catalog_store(settings).upsert(approved)
+    store.delete(draft_id)
+
+    # Каталог читается по mtime — портал подхватит карточку сразу.
+    return {"approved": approved.model_dump(mode="json")}
+
+
+@admin_router.delete("/services/drafts/{draft_id}")
+def draft_reject(draft_id: str, request: Request, _: Settings = Depends(require_admin)) -> dict:
+    if not _drafts(request).delete(draft_id):
+        raise HTTPException(status_code=404, detail={"reason": f"черновик {draft_id} не найден"})
+    return {"rejected": draft_id}
+
+
+def _perechen_path(settings: Settings) -> Path:
+    """Файл перечня в raw/: ищем по префиксу, а не по точному имени."""
+    matches = sorted(settings.raw_dir.glob("*ukaz*perechen*.md"))
+    return matches[0] if matches else settings.raw_dir / "2010_200_ukaz-perechen-administrativnykh-procedur.md"
+
+
+def _drafts(request: Request):
+    store = getattr(request.app.state, "drafts", None)
+    if store is None:
+        raise HTTPException(status_code=503, detail={"reason": "хранилище черновиков не инициализировано"})
+    return store
+
+
+def _merge_positions_into_file(target: Path, doc_meta: dict, chunks: list) -> None:
+    """Дописывает позиции в файл раздела, не теряя уже лежащие там."""
+    existing: list = []
+    if target.exists():
+        try:
+            existing = json.loads(target.read_text(encoding="utf-8")).get("chunks", [])
+        except json.JSONDecodeError:
+            existing = []
+    known = {chunk.get("chunk_id") for chunk in existing}
+    merged = [*existing, *(c.model_dump(mode="json") for c in chunks if c.chunk_id not in known)]
+    target.write_text(
+        json.dumps({"doc": doc_meta, "chunks": merged}, ensure_ascii=False, indent=2),
+        encoding="utf-8",
+    )
 
 
 # --- выученные ответы (доучивание) -----------------------------------------

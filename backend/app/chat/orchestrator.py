@@ -16,6 +16,7 @@ from typing import TYPE_CHECKING
 from app.chat.router import ServiceRouter
 from app.chat.sessions import SessionMemory
 from app.core.config import Settings
+from app.kb.models import RetrievedChunk
 from app.llm.client import LlmClient
 from app.models.schemas import ChatRequest, ChatResponse, Citation
 from app.retrieval.grouping import article_key
@@ -131,6 +132,38 @@ def _extract_markers(answer: str) -> list[str]:
 
 
 _REFUSAL_MAX_CHARS = 300
+# Минимальное пересечение слов ответа с фрагментом, чтобы считать фрагмент
+# опорой ответа. Ниже порога — опоры нет, и мы не приклеиваем цитату.
+_MIN_SUPPORT_OVERLAP = 1.2
+
+
+def best_supporting_chunk(answer: str, hits) -> RetrievedChunk | None:
+    """Фрагмент, на который ответ опирается сильнее всего.
+
+    Зачем: модель часто отвечает верно, но маркер не ставит. Раньше в этом
+    случае цитатой становился первый хит поиска — и под верным ответом стояла
+    не та статья (7 из 8 провалов eval были именно такими). Ответ обычно
+    повторяет слова нормы, поэтому нужный фрагмент находится по пересечению
+    слов, а не по порядку в выдаче.
+    """
+    answer_tokens = set(tokenize(answer))
+    if not answer_tokens:
+        return None
+    best: RetrievedChunk | None = None
+    best_score = 0.0
+    for hit in hits:
+        chunk_tokens = set(tokenize(hit.chunk.text))
+        if not chunk_tokens:
+            continue
+        # Нормируем на длину фрагмента: длинные статьи не должны выигрывать
+        # только за счёт размера.
+        overlap = len(answer_tokens & chunk_tokens) / (len(chunk_tokens) ** 0.5)
+        if overlap > best_score:
+            best_score = overlap
+            best = hit
+    if best is None or best_score < _MIN_SUPPORT_OVERLAP:
+        return None
+    return best
 
 
 def _accepted_markers(answer: str, hits, store: ChunkStore) -> list[str]:
@@ -400,17 +433,25 @@ class Orchestrator:
         # Раньше проверялось существование id во всём корпусе, и модель могла
         # сослаться на пункт, которого она не видела.
         marker_ids = _accepted_markers(llm_answer, hits, self.store)
-        if not marker_ids:
-            # Нет подтверждённой ссылки — приклеивать цитату к тексту модели
-            # нельзя: получится «непроверенный ответ с видом проверенного».
-            # Отдаём дословный фрагмент акта с честной пометкой.
-            answer, citations = self._extractive_answer(hits)
-            self._remember(request, answer)
-            return self._done(
-                answer, citations, suggested=suggested, started=started, source="extractive"
-            )
-        citations = _citations_from(marker_ids, self.store)
         answer = _strip_markers(llm_answer)
+
+        if marker_ids:
+            citations = _citations_from(marker_ids, self.store)
+        else:
+            # Модель маркер не поставила. Смотрим, на какой из переданных
+            # фрагментов её ответ опирается по тексту: цитата должна
+            # соответствовать ответу, а не порядку в выдаче.
+            support = best_supporting_chunk(answer, hits)
+            if support is None:
+                # Опора не найдена — приклеивать ссылку к тексту модели нельзя.
+                # Отдаём дословный фрагмент акта с честной пометкой.
+                extractive, citations = self._extractive_answer(hits)
+                self._remember(request, extractive)
+                return self._done(
+                    extractive, citations, suggested=suggested,
+                    started=started, source="extractive",
+                )
+            citations = _citations_from([support.chunk.chunk_id], self.store)
         self._remember(request, answer)
         return self._done(
             answer, citations, refusal=False,

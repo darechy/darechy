@@ -9,6 +9,7 @@ class FakeLlm:
     def __init__(self, chat_script=None) -> None:
         self.chat_script = list(chat_script or [])
         self.chat_calls: list[tuple[str, str]] = []
+        self.last_max_tokens: int | None = None
 
     def embed(self, text: str) -> list[float] | None:
         return [0.1] * 8
@@ -16,8 +17,11 @@ class FakeLlm:
     def embed_batch(self, texts: list[str]) -> list[list[float]] | None:
         return [[0.1] * 8 for _ in texts]
 
-    def chat(self, system_prompt: str, user_prompt: str) -> str | None:
+    def chat(
+        self, system_prompt: str, user_prompt: str, max_tokens: int | None = None
+    ) -> str | None:
         self.chat_calls.append((system_prompt, user_prompt))
+        self.last_max_tokens = max_tokens
         if not self.chat_script:
             return None
         item = self.chat_script.pop(0)

@@ -67,6 +67,9 @@ class Settings(BaseSettings):
     admin_token: str = ""
     services_file: Path = BACKEND_DIR / "app" / "data" / "services.json"
     taught_file: Path = REPO_DIR / "kb_corpus" / "taught" / "answers.json"
+    # Черновики карточек услуг из перечня: лежат ОТДЕЛЬНО от рабочего каталога,
+    # на портал попадает только утверждённое человеком.
+    drafts_file: Path = BACKEND_DIR / "app" / "data" / "services_drafts.json"
 
     # Голос (неделя 3)
     whisper_model: str = "large-v3-turbo"

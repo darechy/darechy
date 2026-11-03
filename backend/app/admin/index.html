@@ -82,6 +82,7 @@
   <button data-tab="corpus" aria-selected="true">1. База знаний</button>
   <button data-tab="services" aria-selected="false">2. Услуги</button>
   <button data-tab="taught" aria-selected="false">3. Доучить модель</button>
+  <button data-tab="catalog" aria-selected="false">4. Каталог из перечня</button>
 </nav>
 
 <main>
@@ -236,6 +237,45 @@
     <div class="msg" id="taughtMsg"></div>
     <div id="taughtList"></div>
   </section>
+  <!-- 4. КАТАЛОГ ИЗ ПЕРЕЧНЯ -->
+  <section id="catalog">
+    <h2>Каталог услуг из перечня административных процедур</h2>
+    <p class="hint">
+      Перечень (Указ № 200) — это готовый каталог госуслуг: 20 разделов, 480 процедур,
+      и у каждой в акте уже разложено: <b>орган, документы, стоимость, срок</b>.
+      Импорт раздела сразу делает две вещи: кладёт позиции в базу знаний (чтобы у карточек
+      были настоящие цитаты) и собирает <b>черновики</b> карточек.
+      На портал попадает только то, что вы утвердите здесь.
+    </p>
+    <div class="steps">
+      <ol>
+        <li>Выберите раздел — например «Регистрация актов гражданского состояния».</li>
+        <li>Импорт → появятся черновики. Проверьте орган, документы и срок в каждом.</li>
+        <li>Заполните «кто имеет право» (в перечне этого нет) или утверждайте как есть.</li>
+        <li>«Утвердить» — карточка уходит на портал; «Отклонить» — удаляется.</li>
+      </ol>
+    </div>
+    <div class="row">
+      <div>
+        <label for="catalogSection">Раздел перечня</label>
+        <select id="catalogSection"></select>
+      </div>
+      <div>
+        <label for="catalogLimit">Ограничить число процедур (0 — все)</label>
+        <input id="catalogLimit" type="number" value="0" min="0" />
+      </div>
+      <button class="primary" id="importSection">Импортировать раздел</button>
+      <button class="ghost" id="reloadDrafts">Обновить черновики</button>
+    </div>
+    <label style="display:flex;gap:6px;align-items:center;margin-top:8px">
+      <input type="checkbox" id="catalogPolish" style="width:auto" />
+      переписать заголовки через ИИ (медленнее: ~3 с на карточку)
+    </label>
+    <div class="msg" id="catalogMsg"></div>
+    <div id="draftStats"></div>
+    <div id="draftsList"></div>
+  </section>
+
 </main>
 
 <script>
@@ -536,6 +576,67 @@ window.deleteTaught = async (id) => {
   catch (e) { msg($("taughtMsg"), e.message, false); }
 };
 
+/* ---------- каталог из перечня ---------- */
+async function loadSections() {
+  const sections = await api("/sections");
+  $("catalogSection").innerHTML = sections.map((s) =>
+    `<option value="${s.name}">${s.name} — ${s.procedures} процедур</option>`).join("");
+}
+
+async function loadDrafts() {
+  const data = await api("/services/drafts");
+  const st = data.stats;
+  $("draftStats").innerHTML = `<div class="msg show ok" style="margin-top:12px">
+    Черновиков: <b>${st.total}</b> · с органом: ${st.with_authority} ·
+    с документами: ${st.with_documents} · заполнено «кто имеет право»: ${st.filled_who}
+    ${st.total ? `<br><span class="hint">Пока карточка не утверждена, на портале её нет.</span>` : ""}
+  </div>`;
+  const rows = data.items.map((d) => `
+    <tr>
+      <td><b>${d.title}</b><br><span class="hint">${d.id} · ${d.situation}</span></td>
+      <td>${(d.checklist || []).length} док.<br><span class="hint">${(d.deadline || "срок не указан").slice(0, 40)}</span></td>
+      <td><span class="hint">${(d.authority || "орган не указан").slice(0, 70)}</span></td>
+      <td>
+        <button class="ghost" onclick="approveDraft('${d.id}')">Утвердить</button>
+        <button class="ghost" onclick="rejectDraft('${d.id}')">Отклонить</button>
+      </td>
+    </tr>`).join("");
+  $("draftsList").innerHTML = data.items.length
+    ? `<table><tr><th>Карточка</th><th>Документы</th><th>Орган</th><th></th></tr>${rows}</table>`
+    : "";
+}
+
+$("importSection").addEventListener("click", async () => {
+  const section = $("catalogSection").value;
+  if (!section) return msg($("catalogMsg"), "Сначала выберите раздел", false);
+  const limit = Number($("catalogLimit").value) || 0;
+  const polish = $("catalogPolish").checked;
+  msg($("catalogMsg"), `Импортирую «${section}»${polish ? " с ИИ-переписыванием" : ""}…`, true);
+  try {
+    const r = await api(
+      `/services/import?section=${encodeURIComponent(section)}&limit=${limit}&polish=${polish}`,
+      { method: "POST" });
+    msg($("catalogMsg"),
+      `Процедур: ${r.procedures}. ${r.corpus}. Черновики: +${r.drafts.added}, ` +
+      `обновлено ${r.drafts.updated}, всего ${r.drafts.total}. Индекс: ${r.reindex.chunks} пунктов.`);
+    loadDrafts();
+  } catch (e) { msg($("catalogMsg"), e.message, false); }
+});
+$("reloadDrafts").addEventListener("click", loadDrafts);
+
+window.approveDraft = async (id) => {
+  try {
+    const r = await api(`/services/drafts/${id}/approve`, { method: "POST" });
+    msg($("catalogMsg"), `Утверждено: «${r.approved.title}» — карточка на портале.`);
+    loadDrafts();
+  } catch (e) { msg($("catalogMsg"), e.message, false); }
+};
+window.rejectDraft = async (id) => {
+  if (!confirm("Отклонить черновик? Карточка будет удалена.")) return;
+  try { await api(`/services/drafts/${id}`, { method: "DELETE" }); loadDrafts(); }
+  catch (e) { msg($("catalogMsg"), e.message, false); }
+};
+
 /* ---------- старт ---------- */
 $("token").value = state.token;
 $("saveToken").addEventListener("click", () => {
@@ -550,6 +651,8 @@ async function boot() {
     await loadCorpus();
     await loadServices();
     await loadTaught();
+    await loadSections();
+    await loadDrafts();
     renderPicked();
   } catch (e) { setConn(false, e.message); }
 }
