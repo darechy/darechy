@@ -93,3 +93,83 @@ def test_unreferenced_marker_falls_back_to_top_chunk(env) -> None:
     orch = Orchestrator(settings, store, llm)
     response = orch.answer(ChatRequest(message="когда назначается пособие?"))
     assert response.citations[0].chunk_id == "a_p2" or response.citations[0].chunk_id == "a_p1"
+
+
+# --- ответ про документы из карточки услуги ---------------------------------
+
+
+def _service(sid: str, title: str, *, checklist=None, authority="", cost="", point=None):
+    from app.models.schemas import ChecklistItem, Service, Source
+
+    return Service(
+        id=sid,
+        title=title,
+        situation="registraciya-aktov",
+        summary=title,
+        who="",
+        amount="",
+        deadline="",
+        authority=authority,
+        cost=cost,
+        checklist=[ChecklistItem(item=i, where="") for i in (checklist or [])],
+        sources=[Source(title="Указ № 200, позиция 5.2", point=point)] if point else [],
+        keywords=["регистрация брака"],
+    )
+
+
+def test_documents_question_answered_from_checklist(env) -> None:
+    """Список документов берётся из карточки услуги, а не из пересказа модели.
+
+    Реальный случай: на «какие документы нужны для регистрации брака» модель
+    отдала одну строку из перечня вместо всего списка. Чек-лист услуги собран
+    из того же пункта акта, поэтому ответ ассистента и портал не расходятся.
+    """
+    from app.chat.router import ServiceRouter
+
+    settings, store = env
+    service = _service(
+        "p5-2-brak",
+        "Регистрация заключения брака",
+        checklist=["совместное заявление", "паспорта лиц, вступающих в брак"],
+        authority="орган загса",
+        cost="бесплатно",
+        point="a_p1",
+    )
+    router = ServiceRouter([service])
+    llm = FakeLlm(chat_script=["этого не должно быть в ответе"])
+    orch = Orchestrator(settings, store, llm, router=router)
+
+    response = orch.answer(ChatRequest(message="какие документы нужны для регистрации брака"))
+    assert response.source == "checklist"
+    assert "совместное заявление" in response.answer
+    assert "паспорта лиц, вступающих в брак" in response.answer
+    assert "орган загса" in response.answer
+    assert response.citations, "ответ обязан ссылаться на пункт акта"
+    assert llm.chat_calls == [], "для списка документов модель не нужна"
+
+
+def test_documents_question_without_service_asks_to_clarify(env) -> None:
+    """Услуга не распознана — уточняем, а не угадываем перечень."""
+    from app.chat.router import ServiceRouter
+
+    settings, store = env
+    router = ServiceRouter([_service("p5-2-brak", "Регистрация заключения брака",
+                                     checklist=["заявление"], point="a_p1")])
+    orch = Orchestrator(settings, store, FakeLlm(), router=router)
+    response = orch.answer(ChatRequest(message="какие документы нужны для получения паспорта"))
+    assert response.source == "clarify"
+    assert "Уточните" in response.answer
+
+
+def test_checklist_answer_disabled_falls_back(env) -> None:
+    """Флаг выключен — работает обычный путь, ответ не ломается."""
+    from app.chat.router import ServiceRouter
+
+    settings, store = env
+    settings.checklist_answers = False
+    router = ServiceRouter([_service("p5-2-brak", "Регистрация заключения брака",
+                                     checklist=["заявление"], point="a_p1")])
+    orch = Orchestrator(settings, store, FakeLlm(chat_script=["обычный ответ [a_p1]"]),
+                        router=router)
+    response = orch.answer(ChatRequest(message="какие документы нужны для регистрации брака"))
+    assert response.source != "checklist"

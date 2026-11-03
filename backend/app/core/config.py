@@ -47,6 +47,8 @@ class Settings(BaseSettings):
     warmup_on_start: bool = True
     # Переспрашивать услугу, если спросили про документы без привязки.
     clarify_doc_intent: bool = True
+    # Отвечать про документы списком из карточки услуги, а не пересказом модели.
+    checklist_answers: bool = True
     # Сворачивать пункты в статьи при поиске. По замеру на текущем корпусе
     # выключено (71,4% против 64,3%); см. scripts/tune_gate.py.
     group_articles: bool = False

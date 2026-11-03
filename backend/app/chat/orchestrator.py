@@ -32,6 +32,11 @@ logger = logging.getLogger(__name__)
 # без неё поиск тянет документы из подходящих по словам процедур, и модель
 # честно пересказывает не тот пункт. Реальный случай: «какие документы нужны
 # для получения паспорта» отвечало документами на пособие при рождении.
+DOCS_TEMPLATE = (
+    "Для услуги «{title}» нужны:\n{items}\n\n"
+    "{authority_line}{cost_line}Источник: {source}."
+)
+
 CLARIFY_TEMPLATE = (
     "Уточните, пожалуйста, для какой услуги нужны документы — от этого зависит "
     "перечень. Я подскажу по этим услугам: {services}. "
@@ -339,6 +344,24 @@ class Orchestrator:
                 source="taught",
             )
 
+        # Вопрос про документы и услуга распознана — отвечаем списком из
+        # карточки услуги, а не пересказом модели. Список взят из перечня
+        # административных процедур дословно, он же показан на странице
+        # услуги: ответ ассистента и портал не могут расходиться.
+        # Замер на живом сервере: на вопрос «какие документы нужны для
+        # регистрации брака» модель отдала одну строку из списка вместо всего
+        # перечня документов.
+        documents_answer = self._documents_answer(request, routed)
+        if documents_answer is not None:
+            self._remember(request, documents_answer.answer)
+            return self._done(
+                documents_answer.answer,
+                documents_answer.citations,
+                suggested=suggested,
+                started=started,
+                source="checklist",
+            )
+
         # Интент «какие документы» без распознанной услуги: уточняем, а не
         # угадываем. Иначе ответ будет не про тот документ, который спросили.
         if self._needs_clarification(request, routed, history):
@@ -459,6 +482,39 @@ class Orchestrator:
         )
 
     # --- внутреннее ---------------------------------------------------------
+
+    def _documents_answer(self, request: ChatRequest, routed: list[str]) -> ChatResponse | None:
+        """Собирает ответ про документы из карточки услуги. None — не наш случай."""
+        if not routed or self.router is None or not self.settings.checklist_answers:
+            return None
+        if not (set(tokenize(request.message)) & _DOC_INTENT_TOKENS):
+            return None
+
+        services = {service.id: service for service in getattr(self.router, "_services", [])}
+        service = services.get(routed[0])
+        if service is None or not service.checklist:
+            return None
+
+        items = "\n".join(f"• {item.item}" for item in service.checklist)
+        authority_line = f"Куда обращаться: {service.authority}.\n" if service.authority else ""
+        cost_line = f"Стоимость: {service.cost}.\n" if service.cost else ""
+        source = next((s.title for s in service.sources), "нормативный акт")
+        answer = DOCS_TEMPLATE.format(
+            title=service.title,
+            items=items,
+            authority_line=authority_line,
+            cost_line=cost_line,
+            source=source,
+        )
+
+        # Цитата — тот самый пункт перечня, из которого собран чек-лист.
+        chunk_ids = [s.point for s in service.sources if s.point]
+        citations = _citations_from(
+            [cid for cid in chunk_ids if self.store.get(cid)], self.store
+        )
+        if not citations:
+            return None  # нет подтверждённой нормы — пусть работает обычный путь
+        return ChatResponse(answer=answer, citations=citations)
 
     def _service_titles(self) -> str:
         """Человеческий список услуг для уточняющего вопроса."""
