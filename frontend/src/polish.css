@@ -1,0 +1,432 @@
+/* Доводка: hover кнопок, микрофон, полоса «Главная», маршрут, чеклист, источники, слайдер. Подключается последним. */
+
+:root {
+  --ease-soft: cubic-bezier(0.22, 0.61, 0.36, 1);
+}
+
+.btn,
+.nav-ask,
+.k-btn,
+.k-actions .k-btn {
+  transition:
+    opacity 0.22s var(--ease-soft),
+    filter 0.22s var(--ease-soft),
+    background-color 0.35s var(--ease-soft),
+    background-position 0.7s var(--ease-soft),
+    border-color 0.35s var(--ease-soft),
+    box-shadow 0.55s var(--ease-soft),
+    color 0.3s var(--ease-soft),
+    transform 0.35s var(--ease-soft);
+}
+
+.btn-primary,
+.k-btn-primary {
+  box-shadow: 0 0 0 rgba(90, 75, 242, 0);
+}
+
+.btn-primary:hover:not(:disabled),
+.k-btn-primary:hover {
+  box-shadow: 0 10px 26px rgba(90, 75, 242, 0.32);
+}
+
+.mic {
+  width: 48px;
+  height: 48px;
+  flex: none;
+  border: 0;
+  border-radius: 50%;
+  background: linear-gradient(135deg, #2563eb 0%, #5a4bf2 100%);
+  background-size: 160% 160%;
+  background-position: 0% 50%;
+  color: #ffffff;
+  display: grid;
+  place-items: center;
+  cursor: pointer;
+  box-shadow: 0 6px 16px rgba(37, 99, 235, 0.28);
+  transition:
+    transform 0.35s var(--ease-soft),
+    box-shadow 0.5s var(--ease-soft),
+    background-position 0.6s var(--ease-soft),
+    background-color 0.3s var(--ease-soft);
+}
+
+.mic:hover {
+  background: linear-gradient(135deg, #2563eb 0%, #5a4bf2 100%);
+  background-size: 160% 160%;
+  background-position: 100% 50%;
+  transform: scale(1.07);
+  box-shadow: 0 10px 24px rgba(90, 75, 242, 0.38);
+}
+
+.mic:active {
+  transform: scale(0.96);
+}
+
+.mic.is-rec {
+  background: #233883;
+  color: #ffffff;
+  animation: mic-pulse 1.6s ease-out infinite;
+}
+
+@keyframes mic-pulse {
+  0% {
+    box-shadow: 0 0 0 0 rgba(37, 99, 235, 0.5);
+  }
+  70% {
+    box-shadow: 0 0 0 16px rgba(37, 99, 235, 0);
+  }
+  100% {
+    box-shadow: 0 0 0 0 rgba(37, 99, 235, 0);
+  }
+}
+
+.k-voice-ic,
+.voice-ic {
+  border: 0;
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.2);
+  transform: none;
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.28);
+}
+
+.k-voice-ic svg,
+.voice-ic svg {
+  transform: none;
+}
+
+.voice-btn.is-rec .voice-ic {
+  animation: mic-pulse 1.6s ease-out infinite;
+}
+
+/* ---------- Полоса «Главная» под шапкой ---------- */
+
+.backbar {
+  background: #e9eefb;
+}
+
+.backbar-row {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  min-height: 60px;
+}
+
+.backbar-link {
+  display: inline-flex;
+  align-items: center;
+  gap: 12px;
+  color: var(--ink);
+  font-size: 16px;
+  font-weight: 700;
+  text-decoration: none;
+  transition: color 0.35s var(--ease-soft);
+}
+
+.backbar-ic {
+  display: grid;
+  place-items: center;
+  width: 38px;
+  height: 38px;
+  border-radius: 50%;
+  color: #ffffff;
+  background: linear-gradient(135deg, #2563eb, #5a4bf2);
+  box-shadow: 0 4px 12px rgba(37, 99, 235, 0.3);
+  transition:
+    transform 0.4s var(--ease-soft),
+    box-shadow 0.5s var(--ease-soft);
+}
+
+.backbar-link:hover {
+  color: var(--primary);
+}
+
+.backbar-link:hover .backbar-ic {
+  transform: translateX(-4px);
+  box-shadow: 0 8px 20px rgba(90, 75, 242, 0.4);
+}
+
+.backbar-trail {
+  display: inline-flex;
+  align-items: center;
+  gap: 14px;
+  color: var(--ink-2);
+  font-size: 15px;
+  text-decoration: none;
+}
+
+.backbar-trail::before {
+  content: '/';
+  color: rgba(35, 56, 131, 0.3);
+}
+
+a.backbar-trail:hover {
+  color: var(--primary);
+}
+
+/* ---------- Маршрут ---------- */
+
+.route {
+  max-width: 880px;
+  gap: 14px;
+}
+
+.route li {
+  position: relative;
+  grid-template-columns: 44px 1fr;
+  gap: 16px;
+}
+
+.route li:not(:last-child)::before {
+  content: '';
+  position: absolute;
+  left: 17px;
+  top: 42px;
+  bottom: -14px;
+  border-left: 2px dashed rgba(37, 99, 235, 0.35);
+}
+
+.route-n {
+  display: grid;
+  place-items: center;
+  width: 36px;
+  height: 36px;
+  border-radius: 50%;
+  background: #ffffff;
+  border: 1.5px solid var(--primary);
+  color: var(--primary);
+  font-family: var(--sans);
+  font-size: 16px;
+  font-weight: 700;
+}
+
+.route-end .route-n {
+  border: 0;
+  color: #ffffff;
+  background: linear-gradient(135deg, #2563eb, #5a4bf2);
+  box-shadow: 0 4px 12px rgba(37, 99, 235, 0.3);
+}
+
+.route-ask {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 20px;
+  padding: 20px 22px;
+  background: #ffffff;
+  border: 1.5px dashed rgba(37, 99, 235, 0.45);
+  border-radius: 2px;
+}
+
+.route-ask h3 {
+  font-size: 20px;
+}
+
+.route-ask p {
+  margin-top: 2px;
+  color: var(--ink-2);
+  font-size: 14px;
+}
+
+.route-ask .btn {
+  flex: none;
+  width: 220px;
+}
+
+@media (max-width: 640px) {
+  .route-ask {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .route-ask .btn {
+    width: 100%;
+  }
+}
+
+/* ---------- Боковая колонка услуги: кнопки обычного размера ---------- */
+
+.cols {
+  align-items: start;
+}
+
+.aside {
+  align-self: start;
+  align-content: start;
+  grid-auto-rows: min-content;
+}
+
+.aside .btn,
+.aside .btn-lg {
+  min-height: 46px;
+  padding: 0 18px;
+  font-size: 16px;
+}
+
+/* ---------- Чеклист: галочка вместо простой заливки ---------- */
+
+.checklist .box {
+  display: grid;
+  place-items: center;
+  width: 22px;
+  height: 22px;
+  margin-top: 2px;
+  border: 1.5px solid var(--ink-2);
+  border-radius: 2px;
+  background: #ffffff;
+  transition:
+    background-color 0.3s var(--ease-soft),
+    border-color 0.3s var(--ease-soft),
+    box-shadow 0.4s var(--ease-soft);
+}
+
+.checklist .box::after {
+  content: '';
+  display: block;
+  width: 6px;
+  height: 11px;
+  margin-top: -2px;
+  border: solid #ffffff;
+  border-width: 0 2.5px 2.5px 0;
+  transform: rotate(45deg) scale(0);
+  transition: transform 0.3s var(--ease-soft);
+}
+
+.checklist input:checked + .box {
+  background: linear-gradient(135deg, #2563eb, #5a4bf2);
+  border-color: transparent;
+  box-shadow: 0 4px 10px rgba(37, 99, 235, 0.3);
+}
+
+.checklist input:checked + .box::after {
+  transform: rotate(45deg) scale(1);
+}
+
+.checklist label:hover .box {
+  border-color: var(--primary);
+}
+
+/* ---------- Источники ---------- */
+
+.sources {
+  gap: 10px;
+}
+
+.sources li {
+  display: grid;
+  grid-template-columns: 36px 1fr;
+  gap: 12px;
+  align-items: start;
+  padding: 14px 16px;
+  background: #ffffff;
+  border: 1px solid var(--line);
+  border-left: 3px solid var(--primary);
+  border-radius: 2px;
+  transition:
+    box-shadow 0.5s var(--ease-soft),
+    transform 0.35s var(--ease-soft);
+}
+
+.sources li:hover {
+  box-shadow: var(--lift);
+  transform: translateY(-1px);
+}
+
+.src-ic {
+  display: grid;
+  place-items: center;
+  width: 36px;
+  height: 36px;
+  color: var(--primary);
+  background: #eef3ff;
+  border-radius: 2px;
+}
+
+.sources a,
+.src-title {
+  color: var(--ink);
+  font-weight: 700;
+  line-height: 1.4;
+  text-decoration: none;
+  transition: color 0.3s var(--ease-soft);
+}
+
+.sources a:hover {
+  color: var(--primary);
+}
+
+.sources small {
+  margin-top: 3px;
+}
+
+/* ---------- Слайдер услуг ---------- */
+
+.slider-ctl {
+  display: flex;
+  gap: 8px;
+  margin-left: auto;
+}
+
+.slider-btn {
+  display: grid;
+  place-items: center;
+  width: 42px;
+  height: 42px;
+  background: #ffffff;
+  border: 1px solid var(--line);
+  border-radius: 50%;
+  color: var(--primary);
+  cursor: pointer;
+  transition:
+    background-color 0.35s var(--ease-soft),
+    color 0.3s var(--ease-soft),
+    transform 0.35s var(--ease-soft),
+    box-shadow 0.5s var(--ease-soft),
+    opacity 0.3s var(--ease-soft);
+}
+
+.slider-btn:hover:not(:disabled) {
+  background: linear-gradient(135deg, #2563eb, #5a4bf2);
+  color: #ffffff;
+  border-color: transparent;
+  transform: scale(1.06);
+  box-shadow: 0 8px 20px rgba(90, 75, 242, 0.32);
+}
+
+.slider-btn:disabled {
+  opacity: 0.35;
+  cursor: default;
+}
+
+.slider-track {
+  display: flex;
+  gap: 14px;
+  margin: 0 -4px;
+  padding: 10px 4px 26px;
+  overflow-x: auto;
+  scroll-snap-type: x mandatory;
+  scroll-behavior: smooth;
+  scrollbar-width: thin;
+  scrollbar-color: rgba(37, 99, 235, 0.35) transparent;
+}
+
+.slider-track .svc {
+  flex: 0 0 340px;
+  scroll-snap-align: start;
+}
+
+@media (max-width: 560px) {
+  .slider-track .svc {
+    flex-basis: 86%;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .mic.is-rec,
+  .voice-btn.is-rec .voice-ic {
+    animation: none !important;
+  }
+
+  .slider-track {
+    scroll-behavior: auto;
+  }
+}

@@ -1,0 +1,55 @@
+/* Чат на главной киоска: появляется над полем ввода, без отдельного окна. */
+
+.k-chat {
+  display: grid;
+  gap: 14px;
+  max-height: 52vh;
+  margin: 0 -4px;
+  padding: 4px 4px 10px;
+  overflow-y: auto;
+  scroll-behavior: smooth;
+  scrollbar-width: thin;
+  scrollbar-color: rgba(37, 99, 235, 0.35) transparent;
+  animation: rise 0.5s var(--ease-soft) both;
+}
+
+.k-chat .msg {
+  max-width: 92%;
+  padding: 16px 22px;
+  font-size: 24px;
+  text-align: left;
+}
+
+.k-chat .msg-text {
+  text-align: left;
+}
+
+.k-chat .msg-user {
+  justify-self: end;
+}
+
+.k-chat .msg-bot {
+  justify-self: start;
+}
+
+.k-chat .link-btn {
+  font-size: 20px;
+}
+
+.k-chat .cites summary {
+  font-size: 18px;
+}
+
+.k-chat .cite blockquote {
+  font-size: 21px;
+}
+
+.k-chat .suggested a {
+  font-size: 21px;
+}
+
+.k-chip:disabled,
+.k-ask-send:disabled {
+  opacity: 0.45;
+  cursor: default;
+}

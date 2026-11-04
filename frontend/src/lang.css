@@ -1,0 +1,139 @@
+/* Смена языка, высота переключателя, поле вопроса, блок принципов. */
+
+/* ---------- Анимация смены языка ----------
+   Старая версия страницы остаётся на экране, новая проявляется поверх неё
+   слева направо с широкой размытой кромкой. Содержимое никогда не пропадает.
+   Три числа для настройки: длительность (1.2s), ширина кромки (30%), кривая. */
+@property --wipe {
+  syntax: '<percentage>';
+  inherits: false;
+  initial-value: 0%;
+}
+
+::view-transition-group(root) {
+  animation-duration: 1.2s;
+}
+
+::view-transition-old(root) {
+  animation: none;
+  mix-blend-mode: normal;
+}
+
+::view-transition-new(root) {
+  mix-blend-mode: normal;
+  animation: lang-wipe 1.2s cubic-bezier(0.45, 0.05, 0.2, 1) both;
+  -webkit-mask-image: linear-gradient(90deg, #000 calc(var(--wipe) - 30%), transparent var(--wipe));
+  mask-image: linear-gradient(90deg, #000 calc(var(--wipe) - 30%), transparent var(--wipe));
+}
+
+@keyframes lang-wipe {
+  from {
+    --wipe: 0%;
+  }
+  to {
+    --wipe: 130%;
+  }
+}
+
+/* Запасной вариант для браузеров без View Transitions: текст мягко «вспыхивает». */
+@keyframes lang-soft {
+  from {
+    opacity: 0.35;
+    transform: translateY(3px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+html.lang-soft main,
+html.lang-soft .k-main,
+html.lang-soft .ftr .wrap,
+html.lang-soft .nav > a,
+html.lang-soft .nav-ask,
+html.lang-soft .asst-body,
+html.lang-soft .voice {
+  animation: lang-soft 0.7s cubic-bezier(0.22, 0.61, 0.36, 1) both;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  ::view-transition-group(*),
+  ::view-transition-old(*),
+  ::view-transition-new(*) {
+    animation: none !important;
+  }
+
+  html.lang-soft main,
+  html.lang-soft .k-main,
+  html.lang-soft .ftr .wrap,
+  html.lang-soft .nav > a,
+  html.lang-soft .nav-ask,
+  html.lang-soft .asst-body,
+  html.lang-soft .voice {
+    animation: none;
+  }
+}
+
+/* ---------- Высота переключателя языка и кнопки ассистента ---------- */
+
+.nav .lang {
+  height: 46px;
+  align-items: stretch;
+}
+
+.nav .lang button {
+  height: 100%;
+  padding: 0 16px;
+  font-size: 14px;
+}
+
+.nav .nav-ask {
+  height: 46px;
+  padding-top: 0;
+  padding-bottom: 0;
+}
+
+/* ---------- Поле вопроса на главной: кнопка впритык, без скруглений ---------- */
+
+.askbox-row {
+  display: flex;
+  align-items: stretch;
+  gap: 0;
+  padding: 0;
+  border: 1px solid var(--ink);
+  border-radius: 0;
+  background: #ffffff;
+  overflow: hidden;
+  box-shadow: none;
+}
+
+.askbox-row input {
+  border-radius: 0;
+}
+
+.askbox-row .btn {
+  align-self: stretch;
+  margin: 0;
+  border-radius: 0;
+  border: 0;
+  padding-left: 28px;
+  padding-right: 28px;
+}
+
+.askbox-row:focus-within {
+  border-color: var(--primary);
+}
+
+/* ---------- Блок «На чём это стоит» ---------- */
+
+.principles {
+  display: flex;
+  flex-direction: column;
+}
+
+.principles ul {
+  flex: 1;
+  justify-content: space-between;
+  gap: 18px;
+}

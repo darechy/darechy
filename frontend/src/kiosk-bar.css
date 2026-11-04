@@ -1,0 +1,23 @@
+/* Шапка киоска: логотип слева, переключатель языка самым правым. */
+
+.k-actions > .k-btn {
+  order: 2;
+}
+
+.k-actions > .k-lang {
+  order: 3;
+}
+
+/* Если есть кнопки «Назад» и «В начало» – они прижаты к языку справа. */
+.k-actions:has(> .k-btn) > .k-btn:first-child {
+  margin-left: auto;
+}
+
+.k-actions:has(> .k-btn) > .k-lang {
+  margin-left: 0;
+}
+
+/* На главной кнопок нет: язык сам уходит вправо. */
+.k-actions:not(:has(> .k-btn)) > .k-lang {
+  margin-left: auto;
+}

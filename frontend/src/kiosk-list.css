@@ -1,0 +1,23 @@
+/* Список услуг на главной киоска: одна услуга – одна строка. */
+
+.k-list-services {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 16px;
+}
+
+.k-list-services .k-step {
+  min-height: 120px;
+  padding: 22px 28px;
+}
+
+.k-list-services .k-step-txt strong {
+  font-size: 28px;
+}
+
+.k-list-services .k-step-txt small {
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}

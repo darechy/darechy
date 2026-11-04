@@ -1,68 +1,188 @@
-import { useContext, useState } from 'react';
+import { useContext, useEffect, useRef, useState } from 'react';
+import type { FormEvent } from 'react';
 
-import type { Service } from './api';
+import { postChat, type ChatResponse, type Service } from './api';
 import { AppCtx } from './context';
-import { SITUATIONS, useT, type Lang } from './i18n';
-import { BrandMark, Icon, situationIcon } from './icons';
-import { Status, useSituationCards } from './pages';
+import { EXAMPLES, SITUATIONS, useT, type Lang } from './i18n';
+import { BrandMark, Icon } from './icons';
+import { Status } from './pages';
 import type { Route } from './router';
 import { speak, stopSpeaking } from './speech';
 import { useU } from './ui';
 
+const clean = (s: string): string => s.replace(/^[\s\u2757\u203C\u26A0\uFE0F]+/, '');
+
+type ChatMsg =
+  | { role: 'user'; text: string }
+  | { role: 'bot'; resp: ChatResponse }
+  | { role: 'error'; text: string };
+
+function newSessionId(): string {
+  return typeof crypto !== 'undefined' && 'randomUUID' in crypto
+    ? crypto.randomUUID()
+    : `s-${Date.now()}-${Math.random().toString(16).slice(2)}`;
+}
+
+// Главная киоска: чат появляется над полем ввода, ниже – все услуги в столбик, самая новая первой.
 function KioskHome() {
   const u = useU();
-  const { openAssistant, situations } = useContext(AppCtx);
-  const cards = useSituationCards().filter((c) => c.active);
+  const { t, lang } = useT();
+  const { openAssistant, services } = useContext(AppCtx);
+  const [question, setQuestion] = useState('');
+  const [messages, setMessages] = useState<ChatMsg[]>([]);
+  const [busy, setBusy] = useState(false);
+  const sessionId = useRef(newSessionId());
+  const endRef = useRef<HTMLDivElement | null>(null);
+  const list = services.kind === 'ok' ? [...services.data].reverse() : [];
+  const serviceList = services.kind === 'ok' ? services.data : [];
+
+  useEffect(() => {
+    endRef.current?.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+  }, [messages, busy]);
+
+  const send = async (raw: string) => {
+    const text = raw.trim();
+    if (!text || busy) return;
+    stopSpeaking();
+    setMessages((prev) => [...prev, { role: 'user', text }]);
+    setQuestion('');
+    setBusy(true);
+    try {
+      const resp = await postChat({ message: text, session_id: sessionId.current, top_k: 6 });
+      setMessages((prev) => [...prev, { role: 'bot', resp }]);
+      speak(resp.answer, lang);
+    } catch (err) {
+      setMessages((prev) => [...prev, { role: 'error', text: `${t('chat_err')}: ${err instanceof Error ? err.message : String(err)}` }]);
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const submit = (event: FormEvent) => {
+    event.preventDefault();
+    void send(question);
+  };
+
   return (
     <>
       <h1 className='k-title'>{u('k_title')}</h1>
       <p className='k-sub'>{u('k_sub')}</p>
 
-      <button className='k-voice' type='button' onClick={() => openAssistant({ voice: true })}>
-        <span className='k-voice-ic'>
-          <Icon name='mic' size={56} />
-        </span>
-        <span>
-          <strong>{u('k_voice')}</strong>
-          <small>{u('k_voice_d')}</small>
-        </span>
-      </button>
+      <form className='k-ask' onSubmit={submit}>
+        {(messages.length > 0 || busy) && (
+          <div className='k-chat' aria-live='polite'>
+            {messages.map((msg, index) => {
+              if (msg.role === 'user') {
+                return (
+                  <div key={index} className='msg msg-user'>
+                    {msg.text}
+                  </div>
+                );
+              }
+              if (msg.role === 'error') {
+                return (
+                  <div key={index} className='msg msg-error'>
+                    {msg.text}
+                  </div>
+                );
+              }
+              const { resp } = msg;
+              const suggested = resp.suggested_services
+                .map((sid) => serviceList.find((s) => s.id === sid))
+                .filter((s) => s !== undefined);
+              return (
+                <div key={index} className={`msg msg-bot ${resp.refusal ? 'msg-refusal' : ''}`}>
+                  {resp.refusal && <span className='msg-flag'>{t('refusal')}</span>}
+                  <p className='msg-text'>{resp.answer}</p>
+                  <button className='link-btn' type='button' onClick={() => speak(resp.answer, lang)}>
+                    <Icon name='speaker' size={28} /> {u('a_speak')}
+                  </button>
+                  {resp.citations.length > 0 && (
+                    <details className='cites'>
+                      <summary>
+                        {u('a_why')} ({resp.citations.length})
+                      </summary>
+                      {resp.citations.map((c) => {
+                        const meta = [c.doc_number, c.doc_date, c.location].filter(Boolean).join(' · ');
+                        return (
+                          <figure className='cite' key={c.chunk_id}>
+                            <blockquote>{c.quote}</blockquote>
+                            <figcaption>
+                              <strong>{c.doc_title}</strong>
+                              {meta && <span> · {meta}</span>}
+                            </figcaption>
+                          </figure>
+                        );
+                      })}
+                    </details>
+                  )}
+                  {suggested.length > 0 && (
+                    <div className='suggested'>
+                      <h3>{t('suggested')}</h3>
+                      <ul>
+                        {suggested.map((s) => (
+                          <li key={s.id}>
+                            <a href={`#/service/${encodeURIComponent(s.id)}`}>{s.title}</a>
+                          </li>
+                        ))}
+                      </ul>
+                    </div>
+                  )}
+                </div>
+              );
+            })}
+            {busy && (
+              <div className='msg msg-bot msg-thinking'>
+                <span className='dots' aria-hidden='true'>
+                  <i />
+                  <i />
+                  <i />
+                </span>
+                {t('thinking')}
+              </div>
+            )}
+            <div ref={endRef} />
+          </div>
+        )}
 
-      <h2 className='k-h2'>{u('k_topics')}</h2>
-      {situations.kind !== 'ok' ? (
-        <Status state={situations} />
-      ) : (
-        <div className='k-grid'>
-          {cards.map((card) => (
-            <a key={card.id} className='k-tile' href={`#/situation/${encodeURIComponent(card.id)}`}>
-              <span className='k-tile-ic'>
-                <Icon name={situationIcon(card.id)} size={44} />
-              </span>
-              <span>{card.title}</span>
-            </a>
-          ))}
-          <a className='k-tile' href='#/services'>
-            <span className='k-tile-ic'>
-              <Icon name='list' size={44} />
-            </span>
-            <span>{u('k_all')}</span>
-          </a>
+        <label className='k-ask-label' htmlFor='k-q'>
+          {t('ask_label')}
+        </label>
+        <div className='k-ask-row'>
+          <input id='k-q' value={question} onChange={(event) => setQuestion(event.target.value)} placeholder={t('ask_ph')} autoComplete='off' />
+          <button className='k-ask-send' type='submit' disabled={busy || !question.trim()}>
+            {t('ask_btn')}
+          </button>
         </div>
-      )}
-    </>
-  );
-}
 
-function KioskServices() {
-  const { t } = useT();
-  const { services } = useContext(AppCtx);
-  return (
-    <>
-      <h1 className='k-title'>{t('svc_title')}</h1>
+        <ul className='k-ask-chips'>
+          {EXAMPLES[lang].map((example) => (
+            <li key={example}>
+              <button className='k-chip' type='button' disabled={busy} onClick={() => void send(example)}>
+                {example}
+              </button>
+            </li>
+          ))}
+        </ul>
+
+        <div className='k-ask-div' />
+
+        <button className='k-voice' type='button' onClick={() => openAssistant({ voice: true })}>
+          <span className='k-voice-ic'>
+            <Icon name='mic' size={44} />
+          </span>
+          <span>
+            <strong>{u('k_voice')}</strong>
+            <small>{u('k_voice_d')}</small>
+          </span>
+        </button>
+      </form>
+
+      <h2 className='k-h2'>{t('svc_title')}</h2>
       <Status state={services} />
       {services.kind === 'ok' && (
-        <div className='k-steps'>
-          {services.data.map((service) => (
+        <div className='k-list-services'>
+          {list.map((service) => (
             <a key={service.id} className='k-step' href={`#/service/${encodeURIComponent(service.id)}`}>
               <span className='k-step-txt'>
                 <strong>{service.title}</strong>
@@ -130,11 +250,11 @@ function KioskService({ id }: { id: string }) {
     const text = [
       service.title,
       service.summary,
-      `${u('k_who')}: ${service.who}`,
-      `${u('k_amount')}: ${service.amount}`,
-      `${u('k_when')}: ${service.deadline}`,
+      `${u('k_who')}: ${clean(service.who)}`,
+      `${u('k_amount')}: ${clean(service.amount)}`,
+      `${u('k_when')}: ${clean(service.deadline)}`,
       `${u('k_bring')}:`,
-      ...service.checklist.map((row, i) => `${i + 1}. ${row.item}. ${u('k_where')} ${row.where}`),
+      ...service.checklist.map((row, i) => `${i + 1}. ${clean(row.item)}. ${u('k_where')} ${clean(row.where)}`),
     ].join('. ');
     setReading(true);
     speak(text, lang as Lang, () => setReading(false));
@@ -157,15 +277,15 @@ function KioskService({ id }: { id: string }) {
       <div className='k-facts'>
         <div>
           <span>{u('k_who')}</span>
-          <strong>{service.who}</strong>
+          <strong>{clean(service.who)}</strong>
         </div>
         <div>
           <span>{u('k_amount')}</span>
-          <strong>{service.amount}</strong>
+          <strong>{clean(service.amount)}</strong>
         </div>
         <div>
           <span>{u('k_when')}</span>
-          <strong>{service.deadline}</strong>
+          <strong>{clean(service.deadline)}</strong>
         </div>
       </div>
 
@@ -175,9 +295,9 @@ function KioskService({ id }: { id: string }) {
           <li key={index}>
             <span className='k-step-n'>{index + 1}</span>
             <span>
-              <strong>{row.item}</strong>
+              <strong>{clean(row.item)}</strong>
               <small>
-                {u('k_where')} {row.where}
+                {u('k_where')} {clean(row.where)}
               </small>
             </span>
           </li>
@@ -190,7 +310,7 @@ function KioskService({ id }: { id: string }) {
           {service.sources.map((source, index) => (
             <li key={index}>
               {source.title}
-              {source.point ? ` — ${source.point}` : ''}
+              {source.point ? ` – ${source.point}` : ''}
             </li>
           ))}
         </ul>
@@ -212,12 +332,12 @@ function KioskNotFound() {
 export function KioskApp({ route }: { route: Route }) {
   const { lang, setLang } = useT();
   const u = useU();
-  const atHome = route.name === 'home' && route.section !== 'services';
+  const atHome = route.name === 'home';
   return (
     <div className='k'>
       <header className='k-bar'>
         <a className='k-brand' href='#/'>
-          <BrandMark size={48} /> ДаРэчы
+          <BrandMark size={56} />
         </a>
         <div className='k-actions'>
           {!atHome && (
@@ -241,8 +361,7 @@ export function KioskApp({ route }: { route: Route }) {
       </header>
 
       <main className='k-main'>
-        {route.name === 'home' && route.section === 'services' && <KioskServices />}
-        {route.name === 'home' && route.section !== 'services' && <KioskHome />}
+        {route.name === 'home' && <KioskHome />}
         {route.name === 'situation' && <KioskSituation id={route.id} />}
         {route.name === 'service' && <KioskService id={route.id} />}
         {route.name === 'notfound' && <KioskNotFound />}
