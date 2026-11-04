@@ -20,30 +20,14 @@ export type IconName = keyof typeof PATHS;
 
 export function Icon({ name, size = 24 }: { name: IconName; size?: number }) {
   return (
-    <svg
-      viewBox='0 0 24 24'
-      width={size}
-      height={size}
-      fill='none'
-      stroke='currentColor'
-      strokeWidth={1.9}
-      strokeLinecap='round'
-      strokeLinejoin='round'
-      aria-hidden='true'
-      focusable='false'
-    >
+    <svg viewBox='0 0 24 24' width={size} height={size} fill='none' stroke='currentColor' strokeWidth={1.9} strokeLinecap='round' strokeLinejoin='round' aria-hidden='true' focusable='false'>
       <path d={PATHS[name]} />
     </svg>
   );
 }
 
-export function BrandMark({ size = 30 }: { size?: number }) {
-  return (
-    <svg viewBox='0 0 32 32' width={size} height={size} aria-hidden='true' focusable='false'>
-      <path d='M16 2l14 14-14 14L2 16z' fill='var(--primary)' />
-      <path d='M16 9l7 7-7 7-7-7z' fill='var(--bg)' />
-    </svg>
-  );
+export function BrandMark({ size = 42 }: { size?: number }) {
+  return <img className='brand-logo' src='/logo.svg' alt='' height={size} />;
 }
 
 const SITUATION_ICONS: Record<string, IconName> = {

@@ -1,0 +1,244 @@
+/* Киоск в общем стиле сайта: тонкие рамки, мягкие тени, градиент логотипа. Подключается последним. */
+
+.kiosk body {
+  font-size: 24px;
+}
+
+.k {
+  background: var(--bg);
+}
+
+.k-bar {
+  gap: 16px;
+  padding: 14px 40px;
+  box-shadow: none;
+}
+
+.k-brand .brand-logo {
+  height: 60px;
+}
+
+.k-btn {
+  min-height: 68px;
+  padding: 0 24px;
+  border: 1px solid rgba(35, 56, 131, 0.22);
+  border-radius: 2px;
+  background: #ffffff;
+  color: var(--ink);
+  font-size: 22px;
+}
+
+.k-btn:active {
+  transform: scale(0.98);
+}
+
+.k-btn-primary {
+  border-color: transparent;
+  color: #ffffff;
+}
+
+.k-lang {
+  border: 1px solid rgba(35, 56, 131, 0.22);
+  border-radius: 2px;
+  background: #ffffff;
+}
+
+.k-lang button {
+  min-height: 66px;
+  min-width: 84px;
+  font-size: 21px;
+}
+
+.k-main {
+  width: min(1120px, 100%);
+  padding: 48px 40px 72px;
+}
+
+.k-title {
+  font-size: 3em;
+  line-height: 1.05;
+}
+
+.k-sub {
+  margin-top: 10px;
+  font-size: 24px;
+}
+
+.k-h2 {
+  margin: 44px 0 18px;
+  font-size: 1.5em;
+}
+
+/* ---------- Карточка вопроса: поле ввода, примеры, голос ---------- */
+
+.k-ask {
+  display: grid;
+  gap: 22px;
+  margin-top: 32px;
+  padding: 28px;
+  background: #ffffff;
+  border: 1px solid var(--line);
+  border-radius: 2px;
+  box-shadow: 0 14px 40px rgba(35, 56, 131, 0.08);
+}
+
+.k-ask-label {
+  color: var(--ink-2);
+  font-size: 15px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.k-ask-row {
+  display: flex;
+  align-items: stretch;
+  background: #ffffff;
+  border: 1px solid rgba(35, 56, 131, 0.35);
+  overflow: hidden;
+  transition: border-color 0.35s var(--ease-soft);
+}
+
+.k-ask-row:focus-within {
+  border-color: var(--primary);
+}
+
+.k-ask-row input {
+  flex: 1;
+  min-width: 0;
+  min-height: 84px;
+  padding: 0 24px;
+  border: 0;
+  outline: none;
+  background: transparent;
+  color: var(--ink);
+  font-size: 26px;
+}
+
+.k-ask-row input::placeholder {
+  color: #8a93ad;
+}
+
+.k-ask-send {
+  min-height: 84px;
+  padding: 0 44px;
+  border: 0;
+  color: #ffffff;
+  font-size: 24px;
+  font-weight: 700;
+  cursor: pointer;
+  background: linear-gradient(120deg, #2563eb 0%, #5a4bf2 55%, #2563eb 100%);
+  background-size: 200% 200%;
+  background-position: 0% 50%;
+  transition: background-position 0.7s var(--ease-soft), opacity 0.3s var(--ease-soft);
+}
+
+.k-ask-send:active:not(:disabled) {
+  background-position: 100% 50%;
+}
+
+.k-ask-send:disabled {
+  opacity: 0.45;
+  cursor: default;
+}
+
+.k-ask-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.k-chip {
+  padding: 12px 22px;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  background: #f5f8ff;
+  color: var(--ink);
+  font-size: 20px;
+  cursor: pointer;
+  transition: background-color 0.3s var(--ease-soft), border-color 0.3s var(--ease-soft);
+}
+
+.k-chip:active {
+  border-color: var(--primary);
+  background: #e9eefb;
+}
+
+.k-ask-div {
+  height: 1px;
+  background: var(--line);
+}
+
+.k-voice {
+  width: 100%;
+  margin: 0;
+  padding: 20px 28px;
+  border: 0;
+  border-radius: 2px;
+  box-shadow: 0 14px 30px rgba(90, 75, 242, 0.26);
+}
+
+.k-voice:active {
+  transform: scale(0.99);
+  box-shadow: 0 6px 16px rgba(90, 75, 242, 0.3);
+}
+
+.k-voice-ic {
+  width: 84px;
+  height: 84px;
+}
+
+.k-voice strong {
+  font-size: 1.6em;
+}
+
+/* ---------- Плитки тем, шаги, факты ---------- */
+
+.k-grid {
+  gap: 18px;
+}
+
+.k-tile,
+.k-step,
+.k-list li,
+.k-facts {
+  border-radius: 2px;
+  box-shadow: 0 8px 24px rgba(35, 56, 131, 0.06);
+}
+
+.k-tile {
+  min-height: 128px;
+  padding: 20px 28px;
+  font-size: 28px;
+  transition: transform 0.3s var(--ease-soft), border-color 0.3s var(--ease-soft);
+}
+
+.k-tile:active,
+.k-step:active {
+  transform: scale(0.985);
+  border-color: var(--primary);
+}
+
+.k-step {
+  padding: 24px 28px;
+}
+
+.k-step-n {
+  width: 58px;
+  height: 58px;
+  border: 1.5px solid var(--primary);
+  border-radius: 50%;
+  background: #ffffff;
+  color: var(--primary);
+  font-family: var(--sans);
+  font-weight: 700;
+}
+
+.k-warn-card {
+  border: 0;
+  border-radius: 2px;
+  box-shadow: 0 30px 80px rgba(35, 56, 131, 0.35);
+}

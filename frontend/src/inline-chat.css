@@ -1,0 +1,38 @@
+/* Встроенный чат на главной для телефонов: появляется над полем ввода, без отдельного окна. */
+
+.ichat {
+  display: grid;
+  gap: 12px;
+  max-height: 55vh;
+  max-height: 55dvh;
+  margin: 0 0 16px;
+  padding: 2px 2px 8px;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  scroll-behavior: smooth;
+  scrollbar-width: thin;
+  animation: rise 0.5s var(--ease-soft) both;
+}
+
+.ichat .msg {
+  max-width: 94%;
+  text-align: left;
+}
+
+.ichat .msg-text {
+  text-align: left;
+}
+
+.ichat .msg-user {
+  justify-self: end;
+}
+
+.ichat .msg-bot {
+  justify-self: start;
+}
+
+.askbox-row .btn:disabled,
+.chip:disabled {
+  opacity: 0.5;
+  cursor: default;
+}

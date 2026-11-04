@@ -1,0 +1,155 @@
+/* Страница услуги и списки в киоске: адаптивные размеры и аккуратная сетка. Подключается последним. */
+
+.k-title {
+  font-size: clamp(32px, 6vw, 56px);
+  line-height: 1.1;
+}
+
+.k-sub {
+  max-width: 900px;
+  font-size: clamp(18px, 2.6vw, 24px);
+}
+
+.k-h2 {
+  margin: 36px 0 16px;
+  font-size: clamp(24px, 3.4vw, 34px);
+}
+
+/* Главная кнопка снова с градиентом: kiosk.css раньше заливал её белым. */
+.k-btn.k-btn-primary {
+  border-color: transparent;
+  color: #ffffff;
+  background: linear-gradient(120deg, #2563eb 0%, #5a4bf2 55%, #2563eb 100%);
+  background-size: 200% 200%;
+  background-position: 0% 50%;
+}
+
+.k-actions-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 14px;
+  margin: 24px 0 28px;
+}
+
+.k-actions-row .k-btn {
+  flex: 1 1 280px;
+  justify-content: center;
+}
+
+/* Три факта: карточка с тонкими разделителями; на узком экране стоят в столбик. */
+.k-facts {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+  gap: 1px;
+  background: var(--line);
+  border: 1px solid var(--line);
+}
+
+.k-facts > div {
+  display: grid;
+  align-content: start;
+  gap: 8px;
+  padding: 20px 24px;
+  background: #ffffff;
+  border: 0;
+}
+
+.k-facts span {
+  font-size: 17px;
+  letter-spacing: 0.08em;
+}
+
+.k-facts strong {
+  font-size: clamp(19px, 2.6vw, 24px);
+  line-height: 1.35;
+}
+
+/* Список документов: круглый номер слева, название и «где взять» одно под другим. */
+.k-list {
+  display: grid;
+  gap: 12px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.k-list li {
+  display: flex;
+  align-items: center;
+  gap: 20px;
+  padding: 18px 24px;
+  background: #ffffff;
+  border: 1px solid var(--line);
+}
+
+.k-step-n {
+  display: grid;
+  place-items: center;
+  flex: none;
+  width: 52px;
+  height: 52px;
+  border: 1.5px solid var(--primary);
+  border-radius: 50%;
+  background: #ffffff;
+  color: var(--primary);
+  font-family: var(--sans);
+  font-size: 22px;
+  font-weight: 700;
+}
+
+.k-list li > span:last-child {
+  display: grid;
+  gap: 4px;
+  min-width: 0;
+}
+
+.k-list strong {
+  display: block;
+  font-size: clamp(19px, 2.6vw, 26px);
+  line-height: 1.3;
+}
+
+.k-list small {
+  display: block;
+  font-size: clamp(15px, 2vw, 19px);
+}
+
+.k-basis {
+  margin-top: 24px;
+  padding: 18px 24px;
+  background: #ffffff;
+  border: 1px solid var(--line);
+}
+
+.k-basis summary {
+  font-size: 20px;
+}
+
+.k-basis ul {
+  margin: 14px 0 0;
+  padding-left: 22px;
+  font-size: 18px;
+}
+
+@media (max-width: 640px) {
+  .k-main {
+    padding: 28px 18px 56px;
+  }
+
+  .k-bar {
+    flex-wrap: wrap;
+    padding: 12px 18px;
+    gap: 12px;
+  }
+
+  .k-list li {
+    padding: 16px 18px;
+    gap: 16px;
+  }
+
+  .k-step-n {
+    width: 44px;
+    height: 44px;
+    font-size: 19px;
+  }
+}

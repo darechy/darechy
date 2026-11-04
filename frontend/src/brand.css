@@ -1,0 +1,246 @@
+/* Палитра из logo.svg. */
+
+:root {
+  --bg: #f2f4fa;
+  --surface: #ffffff;
+  --ink: #233883;
+  --ink-2: #5b678a;
+  --line: #d7deee;
+  --primary: #2563eb;
+  --primary-dark: #1d4ed8;
+  --mark: #5a4bf2;
+  --soft: #e8eefb;
+  --ok: #1c4a3a;
+  --warn-bg: #f4efe4;
+  --warn: #6d5428;
+  --band-top: #ffffff;
+  --band-hero: #f2f4fa;
+  --band-foot: #ffffff;
+  --ease: cubic-bezier(0.22, 0.61, 0.36, 1);
+  --t-fast: 0.28s;
+  --t-mid: 0.4s;
+  --lift: 0 10px 28px rgba(35, 56, 131, 0.1);
+}
+
+/* Шапка и подвал белые, основа #F2F4FA. Без линий. */
+.hdr,
+.k-bar {
+  background: var(--band-top);
+  border-bottom: 0;
+  box-shadow: none;
+}
+
+.hdr::after,
+.k-bar::after,
+.ftr::before {
+  display: none;
+}
+
+.hero {
+  background: var(--band-hero);
+  border-bottom: 0;
+}
+
+.ftr {
+  background: var(--band-foot);
+  border-top: 0;
+  margin-top: 48px;
+  padding: 32px 0 40px;
+}
+
+.tiles {
+  grid-auto-rows: 1fr;
+}
+
+.tile {
+  min-height: 104px;
+  height: 100%;
+}
+
+.svc dl {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 10px;
+}
+
+.svc dd {
+  margin: 2px 0 0;
+  font-family: var(--sans);
+  font-size: 14px;
+  font-weight: 500;
+  line-height: 1.45;
+  color: var(--ink);
+  overflow-wrap: anywhere;
+}
+
+.svc dt {
+  font-size: 11px;
+}
+
+/* ---------- Плавность ---------- */
+
+a,
+.btn,
+.chip,
+.tile,
+.svc,
+.nav > a,
+.lang button,
+.k-lang button,
+.k-btn,
+.k-tile,
+.k-step,
+.link-btn,
+.icon-btn,
+.mic,
+.checklist label,
+.checklist .box,
+.askbox-row,
+.search input,
+.asst-form input {
+  transition:
+    background-color var(--t-fast) var(--ease),
+    background-position var(--t-mid) var(--ease),
+    border-color var(--t-fast) var(--ease),
+    box-shadow var(--t-mid) var(--ease),
+    color var(--t-fast) var(--ease),
+    opacity var(--t-fast) var(--ease),
+    transform var(--t-mid) var(--ease);
+}
+
+a.tile:hover,
+.svc:hover {
+  transform: translateY(-3px);
+  box-shadow: var(--lift);
+  border-color: rgba(37, 99, 235, 0.45);
+}
+
+.chip:hover {
+  transform: translateY(-1px);
+}
+
+.btn:active,
+.k-btn:active {
+  transform: translateY(1px) scale(0.99);
+}
+
+.btn-primary,
+.k-btn-primary,
+.k-voice,
+.voice-btn {
+  background: linear-gradient(120deg, #2563eb 0%, #5a4bf2 55%, #2563eb 100%);
+  background-size: 200% 200%;
+  background-position: 0% 50%;
+  border-color: transparent;
+  color: #fff;
+}
+
+.btn-primary:hover:not(:disabled),
+.k-btn-primary:hover,
+.k-voice:hover,
+.voice-btn:hover:not(:disabled) {
+  background: linear-gradient(120deg, #2563eb 0%, #5a4bf2 55%, #2563eb 100%);
+  background-size: 200% 200%;
+  background-position: 100% 50%;
+  box-shadow: 0 8px 22px rgba(90, 75, 242, 0.28);
+}
+
+.progress span {
+  transition: width 0.6s var(--ease);
+}
+
+.tile-go {
+  transition: transform var(--t-mid) var(--ease);
+}
+
+a.tile:hover .tile-go {
+  transform: translateX(4px);
+}
+
+/* Окно ассистента выезжает мягко, фон затемняется плавно. */
+.asst-overlay {
+  transition: opacity 0.4s var(--ease);
+}
+
+.asst {
+  transition:
+    transform 0.45s var(--ease),
+    visibility 0s linear 0.45s;
+}
+
+.asst.is-open {
+  transition-delay: 0s;
+}
+
+/* Появление сообщений и страниц. */
+@keyframes rise {
+  from {
+    opacity: 0;
+    transform: translateY(10px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+.msg,
+.cite,
+.suggested {
+  animation: rise 0.45s var(--ease) both;
+}
+
+main > *,
+.k-main > * {
+  animation: rise 0.55s var(--ease) both;
+}
+
+.k-warn {
+  animation: rise 0.35s var(--ease) both;
+}
+
+.nav .nav-ask {
+  width: 220px;
+  min-width: 220px;
+}
+
+.brand-name {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+}
+
+.brand-logo {
+  display: block;
+  height: 44px;
+  width: auto;
+}
+
+.k-brand {
+  font-size: 0;
+}
+
+.k-brand .brand-logo {
+  height: 56px;
+}
+
+.asst-empty,
+.asst-empty p,
+.msg,
+.msg-text {
+  text-align: center;
+}
+
+.asst-empty .chips {
+  justify-content: center;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation: none !important;
+    transition: none !important;
+  }
+}

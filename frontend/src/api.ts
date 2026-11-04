@@ -21,19 +21,7 @@ export type Service = {
   deadline: string;
   checklist: ChecklistItem[];
   sources: Source[];
-  // Добавлено синхронно с backend/app/models/schemas.py:
-  // куда обращаться (орган) и сколько стоит. В перечне административных
-  // процедур эти два блока заполнены всегда, поэтому их видно на карточке.
-  authority: string;
-  cost: string;
-  // «проверена» | «черновик»: сгенерированные карточки не показываем до ревью.
-  status: string;
-  // Триггеры ИИ-роутера (на портале не нужны, но контракт держим в синхроне).
-  keywords: string[];
 };
-
-/** Услуга, которую можно показывать: черновики ждут проверки человеком. */
-export const isPublished = (service: Service): boolean => service.status !== 'черновик';
 
 export type Situation = {
   id: string;

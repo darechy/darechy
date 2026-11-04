@@ -1,12 +1,43 @@
-import { useContext, useEffect, useMemo, useState } from 'react';
+import { useContext, useEffect, useMemo, useRef, useState } from 'react';
 import type { FormEvent } from 'react';
 
 import type { Service } from './api';
 import { AppCtx } from './context';
 import type { AsyncState } from './hooks';
 import { EXAMPLES, SITUATIONS, useT } from './i18n';
-import { isPublished } from './api';
 import { Icon, situationIcon } from './icons';
+import { InlineChat, useInlineChat, useIsPhone } from './InlineChat';
+import { useU } from './ui';
+
+const MAX_SLIDES = 15;
+
+// В данных бывают заглушки с «❗»: убираем знак, текст оставляем.
+const clean = (s: string): string => s.replace(/^[\s\u2757\u203C\u26A0\uFE0F]+/, '');
+
+// Полоса под шапкой: большая круглая кнопка «Главная» и путь до текущей страницы.
+function BackBar({ trail }: { trail?: { href?: string; label: string } }) {
+  const { t } = useT();
+  return (
+    <div className='backbar'>
+      <div className='wrap backbar-row'>
+        <a className='backbar-link' href='#/'>
+          <span className='backbar-ic'>
+            <Icon name='back' size={20} />
+          </span>
+          <span>{t('home')}</span>
+        </a>
+        {trail &&
+          (trail.href ? (
+            <a className='backbar-trail' href={trail.href}>
+              {trail.label}
+            </a>
+          ) : (
+            <span className='backbar-trail'>{trail.label}</span>
+          ))}
+      </div>
+    </div>
+  );
+}
 
 export function Status({ state }: { state: AsyncState<unknown> }) {
   const { t } = useT();
@@ -32,28 +63,83 @@ export function useSituationCards() {
   ];
 }
 
+function ServiceCard({ service }: { service: Service }) {
+  const { t } = useT();
+  return (
+    <a className='svc' href={`#/service/${encodeURIComponent(service.id)}`}>
+      <h3>{service.title}</h3>
+      <p>{service.summary}</p>
+      <dl>
+        <div>
+          <dt>{t('amount')}</dt>
+          <dd>{clean(service.amount)}</dd>
+        </div>
+        <div>
+          <dt>{t('deadline')}</dt>
+          <dd>{clean(service.deadline)}</dd>
+        </div>
+      </dl>
+    </a>
+  );
+}
+
 /* ---------- Главная ---------- */
 
 export function Home() {
   const { t, lang } = useT();
+  const u = useU();
   const { services, openAssistant } = useContext(AppCtx);
   const cards = useSituationCards();
   const [question, setQuestion] = useState('');
   const [search, setSearch] = useState('');
+  const trackRef = useRef<HTMLDivElement | null>(null);
+  const [edge, setEdge] = useState({ start: true, end: true });
+  const phone = useIsPhone();
+  const chat = useInlineChat();
+
+  const query = search.trim().toLowerCase();
 
   const filtered = useMemo(() => {
-    if (services.kind !== 'ok') return [];
-    const q = search.trim().toLowerCase();
-    if (!q) return services.data;
-    return services.data.filter((s) => `${s.title} ${s.summary} ${s.who}`.toLowerCase().includes(q));
-  }, [services, search]);
+    if (services.kind !== 'ok' || !query) return [];
+    return services.data.filter((s) => `${s.title} ${s.summary} ${s.who}`.toLowerCase().includes(query));
+  }, [services, query]);
+
+  // Слайдер: самые новые первыми (последняя добавленная услуга в каталоге), не больше 15.
+  const recent = useMemo(() => (services.kind === 'ok' ? [...services.data].reverse().slice(0, MAX_SLIDES) : []), [services]);
+
+  const updateEdge = () => {
+    const el = trackRef.current;
+    if (!el) return;
+    setEdge({ start: el.scrollLeft <= 2, end: el.scrollLeft + el.clientWidth >= el.scrollWidth - 2 });
+  };
+
+  useEffect(() => {
+    updateEdge();
+    window.addEventListener('resize', updateEdge);
+    return () => window.removeEventListener('resize', updateEdge);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [recent.length, query]);
+
+  const slide = (dir: 1 | -1) => {
+    const el = trackRef.current;
+    if (el) el.scrollBy({ left: dir * Math.max(340, el.clientWidth * 0.8), behavior: 'smooth' });
+  };
+
+  // На телефоне ответ появляется над полем ввода, на остальных экранах – боковая панель.
+  const ask = (text: string) => {
+    if (phone) void chat.send(text);
+    else openAssistant({ text });
+  };
 
   const onSubmit = (event: FormEvent) => {
     event.preventDefault();
     if (!question.trim()) return;
-    openAssistant({ text: question });
+    ask(question);
     setQuestion('');
   };
+
+  const showSlider = !query && recent.length > 0;
+  const needArrows = showSlider && !(edge.start && edge.end);
 
   return (
     <>
@@ -66,10 +152,11 @@ export function Home() {
             </h1>
             <p className='hero-sub'>{t('hero_sub')}</p>
             <form className='askbox' onSubmit={onSubmit}>
+              {phone && <InlineChat chat={chat} />}
               <label htmlFor='hero-q'>{t('ask_label')}</label>
               <div className='askbox-row'>
                 <input id='hero-q' value={question} onChange={(event) => setQuestion(event.target.value)} placeholder={t('ask_ph')} autoComplete='off' />
-                <button className='btn btn-primary btn-lg' type='submit'>
+                <button className='btn btn-primary btn-lg' type='submit' disabled={phone && chat.busy}>
                   {t('ask_btn')}
                 </button>
               </div>
@@ -77,7 +164,7 @@ export function Home() {
             <ul className='chips'>
               {EXAMPLES[lang].map((example) => (
                 <li key={example}>
-                  <button className='chip' type='button' onClick={() => openAssistant({ text: example })}>
+                  <button className='chip' type='button' disabled={phone && chat.busy} onClick={() => ask(example)}>
                     {example}
                   </button>
                 </li>
@@ -88,14 +175,14 @@ export function Home() {
           <aside className='principles' aria-label={t('principles')}>
             <h2>{t('principles')}</h2>
             <ul>
-              {[1, 2, 3].map((n) => (
+              {[1, 2, 3, 4, 5].map((n) => (
                 <li key={n}>
                   <span className='check'>
                     <Icon name='check' size={18} />
                   </span>
                   <div>
-                    <h3>{t(`p${n}_t`)}</h3>
-                    <p>{t(`p${n}_d`)}</p>
+                    <h3>{n > 3 ? u(`p${n}_t`) : t(`p${n}_t`)}</h3>
+                    <p>{n > 3 ? u(`p${n}_d`) : t(`p${n}_d`)}</p>
                   </div>
                 </li>
               ))}
@@ -152,48 +239,42 @@ export function Home() {
           <>
             <div className='search'>
               <input type='search' value={search} onChange={(event) => setSearch(event.target.value)} placeholder={t('search_ph')} aria-label={t('search_ph')} />
-              <span className='muted'>
-                {t('found')}: {filtered.length}
-              </span>
+              {query && (
+                <span className='muted'>
+                  {t('found')}: {filtered.length}
+                </span>
+              )}
+              {needArrows && (
+                <div className='slider-ctl'>
+                  <button className='slider-btn' type='button' onClick={() => slide(-1)} disabled={edge.start} aria-label={u('sl_prev')}>
+                    <Icon name='back' size={20} />
+                  </button>
+                  <button className='slider-btn' type='button' onClick={() => slide(1)} disabled={edge.end} aria-label={u('sl_next')}>
+                    <Icon name='arrow' size={20} />
+                  </button>
+                </div>
+              )}
             </div>
-            {filtered.length === 0 ? (
-              <p className='status'>{t('nothing')}</p>
+
+            {query ? (
+              filtered.length === 0 ? (
+                <p className='status'>{t('nothing')}</p>
+              ) : (
+                <div className='svc-list'>
+                  {filtered.map((service) => (
+                    <ServiceCard key={service.id} service={service} />
+                  ))}
+                </div>
+              )
             ) : (
-              <div className='svc-list'>
-                {filtered.map((service) => (
-                  <a key={service.id} className='svc' href={`#/service/${encodeURIComponent(service.id)}`}>
-                    <h3>{service.title}</h3>
-                    <p>{service.summary}</p>
-                    <dl>
-                      <div>
-                        <dt>{t('amount')}</dt>
-                        <dd>{service.amount}</dd>
-                      </div>
-                      <div>
-                        <dt>{t('deadline')}</dt>
-                        <dd>{service.deadline}</dd>
-                      </div>
-                    </dl>
-                  </a>
+              <div className='slider-track' ref={trackRef} onScroll={updateEdge}>
+                {recent.map((service) => (
+                  <ServiceCard key={service.id} service={service} />
                 ))}
               </div>
             )}
           </>
         )}
-      </section>
-
-      <section className='wrap section'>
-        <div className='sec-head'>
-          <h2>{t('ch_title')}</h2>
-        </div>
-        <div className='channels'>
-          {['portal', 'bot', 'kiosk'].map((key) => (
-            <div className='channel' key={key}>
-              <h3>{t(`ch_${key}`)}</h3>
-              <p>{t(`ch_${key}_d`)}</p>
-            </div>
-          ))}
-        </div>
       </section>
     </>
   );
@@ -221,7 +302,7 @@ function useChecked(id: string) {
       try {
         localStorage.setItem(key, JSON.stringify(next));
       } catch {
-        // приватный режим — просто не сохраняем
+        // приватный режим: просто не сохраняем
       }
       return next;
     });
@@ -231,15 +312,13 @@ function useChecked(id: string) {
 export function NotFound() {
   const { t } = useT();
   return (
-    <section className='wrap section'>
-      <h1 className='page-title'>{t('notfound')}</h1>
-      <p className='muted'>{t('notfound_d')}</p>
-      <p>
-        <a className='btn btn-outline' href='#/'>
-          {t('home')}
-        </a>
-      </p>
-    </section>
+    <>
+      <BackBar />
+      <section className='wrap section'>
+        <h1 className='page-title'>{t('notfound')}</h1>
+        <p className='muted'>{t('notfound_d')}</p>
+      </section>
+    </>
   );
 }
 
@@ -254,60 +333,40 @@ function ServiceView({ service }: { service: Service }) {
   const parentMeta = parent ? SITUATIONS.find((m) => m.id === parent.id) : undefined;
 
   return (
-    <article className='wrap section page'>
-      <nav className='crumbs' aria-label='breadcrumbs'>
-        <a href='#/'>{t('home')}</a>
-        {parent && (
-          <>
-            <span>/</span>
-            <a href={`#/situation/${encodeURIComponent(parent.id)}`}>{parentMeta ? parentMeta[lang].title : parent.title}</a>
-          </>
-        )}
-      </nav>
+    <>
+      <BackBar
+        trail={parent ? { href: `#/situation/${encodeURIComponent(parent.id)}`, label: parentMeta ? parentMeta[lang].title : parent.title } : undefined}
+      />
+      <article className='wrap section page'>
+        <header className='page-head'>
+          <h1 className='page-title'>{service.title}</h1>
+          <p className='lead'>{service.summary}</p>
+          <div className='page-actions'>
+            <button className='btn btn-primary' type='button' onClick={() => openAssistant({ serviceId: service.id })}>
+              {t('ask_service')}
+            </button>
+            <button className='btn btn-outline' type='button' onClick={() => window.print()}>
+              {t('print')}
+            </button>
+          </div>
+        </header>
 
-      <header className='page-head'>
-        <h1 className='page-title'>{service.title}</h1>
-        <p className='lead'>{service.summary}</p>
-      </header>
-
-      <dl className='facts'>
-        {/* Поля из перечня административных процедур: у сгенерированных
-            карточек они заполнены всегда, у «кто имеет право» может быть
-            пусто — пустые блоки не показываем, чтобы не было прочерков. */}
-        {service.who && (
+        <dl className='facts'>
           <div>
             <dt>{t('who')}</dt>
-            <dd>{service.who}</dd>
+            <dd>{clean(service.who)}</dd>
           </div>
-        )}
-        {service.amount && (
           <div>
             <dt>{t('amount')}</dt>
-            <dd>{service.amount}</dd>
+            <dd>{clean(service.amount)}</dd>
           </div>
-        )}
-        {service.deadline && (
           <div>
             <dt>{t('deadline')}</dt>
-            <dd>{service.deadline}</dd>
+            <dd>{clean(service.deadline)}</dd>
           </div>
-        )}
-        {service.authority && (
-          <div>
-            <dt>{t('authority')}</dt>
-            <dd>{service.authority}</dd>
-          </div>
-        )}
-        {service.cost && (
-          <div>
-            <dt>{t('cost')}</dt>
-            <dd>{service.cost}</dd>
-          </div>
-        )}
-      </dl>
+        </dl>
 
-      <div className='cols'>
-        <section aria-labelledby='docs-h'>
+        <section className='page-body' aria-labelledby='docs-h'>
           <div className='docs-head'>
             <h2 id='docs-h'>{t('docs')}</h2>
             <span className='muted'>
@@ -326,8 +385,8 @@ function ServiceView({ service }: { service: Service }) {
                     <input type='checkbox' checked={checked} onChange={() => toggle(index)} />
                     <span className='box' aria-hidden='true' />
                     <span>
-                      <strong>{row.item}</strong>
-                      <small>{row.where}</small>
+                      <strong>{clean(row.item)}</strong>
+                      <small>{clean(row.where)}</small>
                     </span>
                   </label>
                 </li>
@@ -339,29 +398,25 @@ function ServiceView({ service }: { service: Service }) {
           <ul className='sources'>
             {service.sources.map((source, index) => (
               <li key={index}>
-                {source.url ? (
-                  <a href={source.url} target='_blank' rel='noreferrer'>
-                    {source.title} ↗
-                  </a>
-                ) : (
-                  <span>{source.title}</span>
-                )}
-                {source.point && <small>{source.point}</small>}
+                <span className='src-ic'>
+                  <Icon name='doc' size={20} />
+                </span>
+                <div>
+                  {source.url ? (
+                    <a href={source.url} target='_blank' rel='noreferrer'>
+                      {clean(source.title)} ↗
+                    </a>
+                  ) : (
+                    <span className='src-title'>{clean(source.title)}</span>
+                  )}
+                  {source.point && <small>{clean(source.point)}</small>}
+                </div>
               </li>
             ))}
           </ul>
         </section>
-
-        <aside className='aside'>
-          <button className='btn btn-primary btn-lg' type='button' onClick={() => openAssistant({ serviceId: service.id })}>
-            {t('ask_service')}
-          </button>
-          <button className='btn btn-outline' type='button' onClick={() => window.print()}>
-            {t('print')}
-          </button>
-        </aside>
-      </div>
-    </article>
+      </article>
+    </>
   );
 }
 
@@ -374,9 +429,7 @@ export function ServicePage({ id }: { id: string }) {
       </section>
     );
   }
-  // Черновики (status === 'черновик') на портал не показываем: карточка
-  // считается черновиком до проверки человеком.
-  const service = services.data.find((s) => s.id === id && isPublished(s));
+  const service = services.data.find((s) => s.id === id);
   return service ? <ServiceView service={service} /> : <NotFound />;
 }
 
@@ -384,6 +437,7 @@ export function ServicePage({ id }: { id: string }) {
 
 export function SituationPage({ id }: { id: string }) {
   const { t, lang } = useT();
+  const u = useU();
   const { services, situations, openAssistant } = useContext(AppCtx);
 
   if (situations.kind !== 'ok' || services.kind !== 'ok') {
@@ -403,39 +457,48 @@ export function SituationPage({ id }: { id: string }) {
     .filter((s): s is Service => s !== undefined);
 
   return (
-    <article className='wrap section page'>
-      <nav className='crumbs' aria-label='breadcrumbs'>
-        <a href='#/'>{t('home')}</a>
-      </nav>
-      <header className='page-head'>
-        <p className='eyebrow'>{t('route')}</p>
-        <h1 className='page-title'>{title}</h1>
-        {meta && <p className='lead'>{meta[lang].hint}</p>}
-        <button className='btn btn-primary btn-lg' type='button' onClick={() => openAssistant({ text: title })}>
-          {t('nav_ask')}
-        </button>
-      </header>
+    <>
+      <BackBar trail={{ label: title }} />
+      <article className='wrap section page'>
+        <header className='page-head'>
+          <p className='eyebrow'>{t('route')}</p>
+          <h1 className='page-title'>{title}</h1>
+          {meta && <p className='lead'>{meta[lang].hint}</p>}
+        </header>
 
-      <ol className='route'>
-        {steps.map((service, index) => (
-          <li key={service.id}>
-            <span className='route-n'>{index + 1}</span>
-            <div className='route-card'>
-              <h2>{service.title}</h2>
-              <p>{service.summary}</p>
-              <p className='route-meta'>
-                <span>
-                  {t('amount')}: {service.amount}
-                </span>
-                <span>
-                  {t('deadline')}: {service.deadline}
-                </span>
-              </p>
-              <a href={`#/service/${encodeURIComponent(service.id)}`}>{t('open_service')} →</a>
+        <ol className='route'>
+          {steps.map((service, index) => (
+            <li key={service.id}>
+              <span className='route-n'>{index + 1}</span>
+              <div className='route-card'>
+                <h2>{service.title}</h2>
+                <p>{service.summary}</p>
+                <p className='route-meta'>
+                  <span>
+                    {t('amount')}: {clean(service.amount)}
+                  </span>
+                  <span>
+                    {t('deadline')}: {clean(service.deadline)}
+                  </span>
+                </p>
+                <a href={`#/service/${encodeURIComponent(service.id)}`}>{t('open_service')} →</a>
+              </div>
+            </li>
+          ))}
+          <li className='route-end'>
+            <span className='route-n'>?</span>
+            <div className='route-ask'>
+              <div>
+                <h3>{u('s_help_t')}</h3>
+                <p>{u('s_help_d')}</p>
+              </div>
+              <button className='btn btn-primary' type='button' onClick={() => openAssistant({ text: title })}>
+                {t('nav_ask')}
+              </button>
             </div>
           </li>
-        ))}
-      </ol>
-    </article>
+        </ol>
+      </article>
+    </>
   );
 }
