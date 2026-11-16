@@ -1,0 +1,104 @@
+/* Логотип Veda в окне ИИ-ассистента. Подключается после glass.css. */
+
+:root {
+  --veda: url('/veda-logo.svg');
+}
+
+/* Название ассистента в шапке окна (панель и страница «Veda V-4»). */
+.asst-head h2 {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.asst-head h2::before {
+  content: '';
+  flex: none;
+  width: 34px;
+  height: 34px;
+  background: var(--veda) center / contain no-repeat;
+}
+
+.chat-page .asst-head h2::before {
+  width: 30px;
+  height: 30px;
+}
+
+/* Боковая панель страницы чата: логотип перед «Darechy AI». */
+.chat-sidebar .chat-brand::before {
+  content: '';
+  flex: none;
+  width: 30px;
+  height: 30px;
+  background: var(--veda) center / contain no-repeat;
+}
+
+/* Пустой чат: крупный логотип над приветствием. */
+.asst-empty::before {
+  content: '';
+  display: block;
+  width: 84px;
+  height: 84px;
+  margin: 0 auto 4px;
+  background: var(--veda) center / contain no-repeat;
+}
+
+.chat-page .asst-empty::before {
+  width: 96px;
+  height: 96px;
+}
+
+/* Ответ ассистента: аватар слева от текста (панель, телефон, киоск). */
+.msg-bot {
+  position: relative;
+  padding-left: 52px;
+}
+
+.msg-bot::before {
+  content: '';
+  position: absolute;
+  left: 10px;
+  top: 8px;
+  width: 30px;
+  height: 30px;
+  background: var(--veda) center / contain no-repeat;
+}
+
+.msg-bot,
+.msg-bot .msg-text {
+  text-align: start;
+}
+
+/* Страница чата: ответы без пузыря, аватар по левому краю. */
+.chat-page .msg-bot {
+  padding-inline: 44px 0;
+}
+
+.chat-page .msg-bot::before {
+  left: 0;
+  top: 2px;
+}
+
+/* Киоск: всё крупнее. */
+.kiosk .asst-head h2::before {
+  width: 56px;
+  height: 56px;
+}
+
+.kiosk .asst-empty::before {
+  width: 120px;
+  height: 120px;
+}
+
+.kiosk .msg-bot,
+.k-chat .msg-bot {
+  padding-left: 84px;
+}
+
+.kiosk .msg-bot::before,
+.k-chat .msg-bot::before {
+  left: 16px;
+  top: 14px;
+  width: 50px;
+  height: 50px;
+}
