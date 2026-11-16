@@ -88,7 +88,7 @@ body {
     padding: 14px 16px;
     background: #ffffff;
     border: 1px solid var(--ink);
-    border-radius: 0;
+    border-radius: var(--radius);
     outline: none;
   }
 
@@ -99,7 +99,7 @@ body {
   .askbox-row .btn {
     width: 100%;
     padding: 14px 20px;
-    border-radius: 2px;
+    border-radius: var(--radius);
   }
 
   /* Слайдер услуг на телефоне листается свайпом, без кнопок. */

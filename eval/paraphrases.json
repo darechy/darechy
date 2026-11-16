@@ -1,0 +1,143 @@
+{
+  "_comment": "Дополнительные разговорные формулировки по локальному корпусу и вопросы вне тематики. Размечено по пунктам корпуса, не по ответам ассистента. Использовалось для настройки, независимая проверка требует отдельного набора.",
+  "cases": [
+    {
+      "id": "par-01",
+      "type": "navigation",
+      "question": "Я пока дома с маленьким ребёнком. На какую поддержку мы можем рассчитывать?",
+      "expected_refusal": false,
+      "expected_services": [
+        "posobie-uhod-do-3-let"
+      ]
+    },
+    {
+      "id": "par-02",
+      "type": "navigation",
+      "question": "В декрете с малышом денег стало меньше, есть ли помощь от государства?",
+      "expected_refusal": false,
+      "expected_services": [
+        "posobie-uhod-do-3-let"
+      ]
+    },
+    {
+      "id": "par-03",
+      "type": "navigation",
+      "question": "Только выписались из роддома, с чего начать оформление выплат?",
+      "expected_refusal": false,
+      "expected_services": [
+        "posobie-rozhdenie"
+      ]
+    },
+    {
+      "id": "par-04",
+      "type": "navigation",
+      "question": "На восьмой неделе уже была у врача и на учёте. Это как-то влияет на выплаты?",
+      "expected_refusal": false,
+      "expected_services": [
+        "posobie-12-nedel"
+      ]
+    },
+    {
+      "id": "par-05",
+      "type": "fact",
+      "question": "После рождения малыша прошло несколько месяцев. До какого срока ещё можно подать на пособие при рождении?",
+      "expected_refusal": false,
+      "expected_citation_contains": "статья 22",
+      "expected_doc_number": "7-З"
+    },
+    {
+      "id": "par-06",
+      "type": "fact",
+      "question": "Где оформляют единовременную выплату при рождении, к кому идти с заявлением?",
+      "expected_refusal": false,
+      "expected_citation_contains": "статья 21",
+      "expected_doc_number": "7-З"
+    },
+    {
+      "id": "par-07",
+      "type": "fact",
+      "question": "Кому положено ежемесячное пособие по уходу за ребёнком младше трёх лет?",
+      "expected_refusal": false,
+      "expected_citation_contains": "статья 12",
+      "expected_doc_number": "7-З"
+    },
+    {
+      "id": "par-08",
+      "type": "fact",
+      "question": "Мы не согласны с отказом в назначении пособия. Где в законе искать порядок обжалования?",
+      "expected_refusal": false,
+      "expected_citation_contains": "статья 23",
+      "expected_doc_number": "7-З"
+    },
+    {
+      "id": "par-09",
+      "type": "fact",
+      "question": "Когда прекращают платить государственные пособия?",
+      "expected_refusal": false,
+      "expected_citation_contains": "статья 24",
+      "expected_doc_number": "7-З"
+    },
+    {
+      "id": "par-10",
+      "type": "fact",
+      "question": "Какие документы взять с собой за пособием на погребение?",
+      "expected_refusal": false,
+      "expected_citation_contains": "позиция 2.35",
+      "expected_doc_number": "200"
+    },
+    {
+      "id": "par-11",
+      "type": "fact",
+      "question": "Для подачи на выплату по случаю рождения малыша что из документов взять?",
+      "expected_refusal": false,
+      "expected_citation_contains": "позиция 2.6",
+      "expected_doc_number": "200"
+    },
+    {
+      "id": "par-12",
+      "type": "fact",
+      "question": "Ребёнок с ВИЧ. Где в законе написано про пособие для него?",
+      "expected_refusal": false,
+      "expected_citation_contains": "статья 17",
+      "expected_doc_number": "7-З"
+    },
+    {
+      "id": "par-13",
+      "type": "fact",
+      "question": "Сколько времени длится выплата пособия по беременности и родам?",
+      "expected_refusal": false,
+      "expected_citation_contains": "статья 8",
+      "expected_doc_number": "7-З"
+    },
+    {
+      "id": "par-14",
+      "type": "refusal",
+      "question": "Обязательно ли нести отдельную справку из бухгалтерии второго родителя для пособия по уходу?",
+      "expected_refusal": true
+    },
+    {
+      "id": "par-15",
+      "type": "refusal",
+      "question": "Сочини стишок о том, как получали пособие по уходу",
+      "expected_refusal": true
+    },
+    {
+      "id": "par-16",
+      "type": "refusal",
+      "question": "Хочу рецепт домашнего хлеба на закваске",
+      "expected_refusal": true
+    },
+    {
+      "id": "par-17",
+      "type": "refusal",
+      "question": "Какая завтра погода в Минске?",
+      "expected_refusal": true
+    },
+    {
+      "id": "par-18",
+      "type": "refusal",
+      "question": "Сколько будет семнадцать умножить на девять?",
+      "expected_refusal": true
+    }
+  ]
+}

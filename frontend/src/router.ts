@@ -5,12 +5,16 @@ export type Route =
   | { name: "home"; section?: "situations" | "services" }
   | { name: "situation"; id: string }
   | { name: "service"; id: string }
+  | { name: "news" }
+  | { name: "chat" }
   | { name: "notfound" };
 
 export function parseHash(hash: string): Route {
   const parts = hash.replace(/^#/, "").split("/").filter(Boolean);
   if (parts.length === 0) return { name: "home" };
   const [head, arg] = parts;
+  if (head === "news" && !arg) return { name: "news" };
+  if (head === "chat" && !arg) return { name: "chat" };
   if (head === "situations" && !arg) return { name: "home", section: "situations" };
   if (head === "services" && !arg) return { name: "home", section: "services" };
   if (head === "situation" && arg) return { name: "situation", id: decodeURIComponent(arg) };

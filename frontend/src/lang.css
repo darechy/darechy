@@ -102,20 +102,20 @@ html.lang-soft .voice {
   gap: 0;
   padding: 0;
   border: 1px solid var(--ink);
-  border-radius: 0;
+  border-radius: var(--radius);
   background: #ffffff;
   overflow: hidden;
   box-shadow: none;
 }
 
 .askbox-row input {
-  border-radius: 0;
+  border-radius: var(--radius);
 }
 
 .askbox-row .btn {
   align-self: stretch;
   margin: 0;
-  border-radius: 0;
+  border-radius: var(--radius);
   border: 0;
   padding-left: 28px;
   padding-right: 28px;

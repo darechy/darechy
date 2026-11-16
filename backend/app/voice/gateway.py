@@ -13,13 +13,31 @@ from pathlib import Path
 from app.core.config import Settings
 
 logger = logging.getLogger(__name__)
+AUDIO_INPUT_FORMATS = {
+    ".ogg": "ogg",
+    ".oga": "ogg",
+    ".opus": "ogg",
+    ".webm": "matroska",
+    ".wav": "wav",
+    ".mp4": "mov",
+    ".m4a": "mov",
+    ".mp3": "mp3",
+    ".flac": "flac",
+}
 
 
 def _ffmpeg_to_wav(src: Path, dst: Path) -> None:
+    input_format = AUDIO_INPUT_FORMATS[src.suffix.lower()]
     subprocess.run(  # noqa: S603 — фиксированные аргументы, без пользовательского шелла
-        ["ffmpeg", "-y", "-i", str(src), "-ar", "16000", "-ac", "1", str(dst)],
+        [
+            "ffmpeg", "-nostdin", "-loglevel", "error", "-y",
+            "-protocol_whitelist", "file", "-f", input_format,
+            *(["-enable_drefs", "0"] if input_format == "mov" else []),
+            "-i", str(src), "-map", "0:a:0", "-t", "180", "-ar", "16000", "-ac", "1", str(dst),
+        ],
         check=True,
         capture_output=True,
+        timeout=30,
     )
 
 

@@ -1,4 +1,8 @@
+const thumb = 'M7 10h-4v11h4z M7 10l4-7c2 0 3 2 2 4l-1 3h6a2 2 0 0 1 2 2l-1 7a2 2 0 0 1-2 2H7';
 const PATHS = {
+  like: thumb,
+  dislike: thumb,
+  copy: 'M8 8h12a1 1 0 0 1 1 1v11a1 1 0 0 1-1 1H9a1 1 0 0 1-1-1z M4 16H3V3h13v1',
   baby: 'M12 3a9 9 0 1 0 0 18a9 9 0 1 0 0-18z M8.5 14.2a4.5 4.5 0 0 0 7 0 M9 9.8h.01 M15 9.8h.01',
   card: 'M5 5h14a2 2 0 0 1 2 2v10a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V7a2 2 0 0 1 2-2z M9 11.5a1.8 1.8 0 1 0 0-3.6a1.8 1.8 0 1 0 0 3.6z M6 16c.6-1.8 5.4-1.8 6 0 M14.5 10h3.5 M14.5 14h3.5',
   clock: 'M12 3a9 9 0 1 0 0 18a9 9 0 1 0 0-18z M12 7v5l3.2 2',
@@ -21,7 +25,7 @@ export type IconName = keyof typeof PATHS;
 export function Icon({ name, size = 24 }: { name: IconName; size?: number }) {
   return (
     <svg viewBox='0 0 24 24' width={size} height={size} fill='none' stroke='currentColor' strokeWidth={1.9} strokeLinecap='round' strokeLinejoin='round' aria-hidden='true' focusable='false'>
-      <path d={PATHS[name]} />
+      <path d={PATHS[name]} transform={name === "dislike" ? "rotate(180 12 12)" : undefined} />
     </svg>
   );
 }

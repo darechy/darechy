@@ -52,6 +52,7 @@ export type ChatRequest = {
   session_id?: string;
   service_id?: string;
   top_k?: number;
+  effort?: 'quick' | 'standard' | 'deep';
 };
 
 async function readError(res: Response): Promise<string> {

@@ -8,7 +8,7 @@
 3. **Доучить модель** — эталонный ответ с триггерами и обязательной ссылкой
    на норму. Отвечает мгновенно и не зависит от настроения модели.
 
-Защита: заголовок `X-Admin-Token` (или ?token= для открытия UI в браузере).
+Защита: заголовок `X-Admin-Token` для запросов к данным.
 """
 
 from __future__ import annotations
@@ -16,9 +16,11 @@ from __future__ import annotations
 import json
 import logging
 from pathlib import Path
+from secrets import compare_digest
 
 from fastapi import APIRouter, Depends, File, Header, HTTPException, Query, Request, UploadFile
-from fastapi.responses import HTMLResponse
+from fastapi.concurrency import run_in_threadpool
+from fastapi.responses import FileResponse, HTMLResponse
 
 from app.core.config import BACKEND_DIR, Settings, get_settings
 from app.kb.corpus import (
@@ -29,6 +31,8 @@ from app.kb.corpus import (
 from app.kb.positions import extract_positions
 from app.kb.procedures import parse_sections
 from app.models.schemas import (
+    ChatRequest,
+    ChatResponse,
     Service,
     TaughtAnswer,
     TaughtAnswerCreate,
@@ -42,26 +46,24 @@ logger = logging.getLogger(__name__)
 admin_router = APIRouter(prefix="/admin", tags=["admin"])
 
 
+
+
+
 # --- доступ -----------------------------------------------------------------
 
 
 def require_admin(
     x_admin_token: str | None = Header(default=None, alias="X-Admin-Token"),
-    token: str | None = Query(default=None),
 ) -> Settings:
-    """Проверяет токен админки. `?token=` — чтобы открыть UI прямо в браузере."""
+    """Проверяет токен для доступа к административным данным."""
     settings = get_settings()
-    provided = x_admin_token or token
-    if not settings.admin_token:
-        raise HTTPException(
-            status_code=503,
-            detail={"reason": "ADMIN_TOKEN не задан в backend/.env — админка выключена"},
-        )
-    if provided != settings.admin_token:
-        raise HTTPException(
-            status_code=401,
-            detail={"reason": "неверный токен админки (заголовок X-Admin-Token)"},
-        )
+    tokens = [settings.admin_token, *settings.admin_accounts.values()]
+    if not any(tokens):
+        raise HTTPException(503, detail={"reason": "Админка не настроена"})
+    if not x_admin_token or not any(
+        token and compare_digest(x_admin_token.encode(), token.encode()) for token in tokens
+    ):
+        raise HTTPException(401, detail={"reason": "Неверный токен админки"})
     return settings
 
 
@@ -84,13 +86,36 @@ def _catalog_store(settings: Settings) -> ServiceCatalogStore:
 # --- UI ---------------------------------------------------------------------
 
 
+@admin_router.get("/metrics")
+def metrics(hours: int = Query(default=24, ge=1, le=720), _: Settings = Depends(require_admin)) -> dict:
+    from app.services.telemetry import snapshot
+
+    return snapshot(hours)
+
+
 @admin_router.get("", response_class=HTMLResponse)
-def admin_page(_: Settings = Depends(require_admin)) -> HTMLResponse:
+def admin_page() -> HTMLResponse:
     """Одностраничная админка. Один файл, без сборки — правится как текст."""
     page = BACKEND_DIR / "app" / "admin" / "index.html"
     if not page.exists():
         raise HTTPException(status_code=500, detail={"reason": "admin/index.html не найден"})
-    return HTMLResponse(page.read_text(encoding="utf-8"))
+    return HTMLResponse(
+        page.read_text(encoding="utf-8"),
+        headers={"Cache-Control": "no-store", "Referrer-Policy": "no-referrer"},
+    )
+
+
+@admin_router.get("/logo.svg", include_in_schema=False)
+def admin_logo() -> FileResponse:
+    return FileResponse(BACKEND_DIR.parent / "frontend" / "public" / "logo.svg", media_type="image/svg+xml")
+
+
+@admin_router.post("/diagnostics/chat", response_model=ChatResponse)
+def diagnostic_chat(
+    body: ChatRequest, request: Request, _: Settings = Depends(require_admin)
+) -> ChatResponse:
+    """Проверяет ответ без сохранения реплики в истории диалога."""
+    return request.app.state.orchestrator.answer(body.model_copy(update={"session_id": None}))
 
 
 # --- корпус: добавить акт ---------------------------------------------------
@@ -102,9 +127,10 @@ def corpus_list(
 ) -> dict:
     """Что уже в базе знаний: акты, чанки, статусы."""
     settings = get_settings()
+    store = getattr(request.app.state, "store", None)
     return {
         "docs": corpus_inventory(settings.corpus_dir, settings.raw_dir),
-        "indexed_chunks": len(_get_chunks(request)),
+        "indexed_chunks": store.size() if store else 0,
         "indexed_statuses": sorted(settings.allowed_statuses),
     }
 
@@ -153,7 +179,7 @@ async def corpus_preview(
 async def corpus_import(
     request: Request,
     file: UploadFile | None = File(default=None),
-    prefix: str | None = Query(default=None),
+    prefix: str | None = Query(default=None, pattern=r"^[\w-]{1,100}$"),
     status: str = Query(default="восстановлен"),
     overwrite: bool = Query(default=False),
     _: Settings = Depends(require_admin),
@@ -185,7 +211,7 @@ async def corpus_import(
     settings.raw_dir.mkdir(parents=True, exist_ok=True)
     (settings.raw_dir / f"{prefix or 'act'}.md").write_text(raw, encoding="utf-8")
 
-    reindexed = _reindex(request)
+    reindexed = await run_in_threadpool(_reindex, request)
     logger.info("Импортирован акт %s: %d чанков", target.name, len(doc.chunks))
     return {
         "saved": target.name,
@@ -198,7 +224,7 @@ async def corpus_import(
 @admin_router.post("/corpus/status")
 def corpus_set_status(
     request: Request,
-    file: str = Query(),
+    file: str = Query(pattern=r"^[\w-]{1,150}\.json$"),
     chunk_id: str | None = Query(default=None),
     status: str = Query(),
     _: Settings = Depends(require_admin),
@@ -210,6 +236,8 @@ def corpus_set_status(
     """
     settings = get_settings()
     path = settings.corpus_dir / file
+    if path.resolve().parent != settings.corpus_dir.resolve():
+        raise HTTPException(status_code=422, detail={"reason": "Недопустимый путь к акту"})
     if not path.exists():
         raise HTTPException(status_code=404, detail={"reason": f"{file} не найден"})
 
@@ -225,6 +253,11 @@ def corpus_set_status(
     path.write_text(json.dumps(payload, ensure_ascii=False, indent=2), encoding="utf-8")
 
     return {"file": file, "changed": changed, "status": status, "reindex": _reindex(request)}
+
+
+@admin_router.post("/corpus/reindex")
+def corpus_reindex(request: Request, _: Settings = Depends(require_admin)) -> dict:
+    return _reindex(request)
 
 
 def _reindex(request: Request) -> dict:
@@ -603,3 +636,40 @@ def taught_delete(answer_id: str, request: Request, _: Settings = Depends(requir
     if not store.delete(answer_id):
         raise HTTPException(status_code=404, detail={"reason": f"ответ {answer_id} не найден"})
     return {"deleted": answer_id}
+
+
+@admin_router.get("/knowledge")
+def knowledge_graph(request: Request, _: Settings = Depends(require_admin)) -> dict:
+    """Реальные связи каталога с пунктами корпуса."""
+    documents = {}
+    for chunk in _get_chunks(request):
+        key = (chunk.doc_number, chunk.doc_date, chunk.doc_title)
+        document = documents.setdefault(key, {"title": chunk.doc_title, "number": chunk.doc_number, "points": []})
+        document["points"].append({
+            "id": chunk.chunk_id, "label": chunk.location.label(), "status": chunk.status,
+            "text": chunk.text,
+        })
+    return {
+        "documents": list(documents.values()),
+        "services": [
+            {"title": service.title, "points": [source.point for source in service.sources if source.point]}
+            for service in request.app.state.catalog.all() if service.status != "черновик"
+        ],
+    }
+
+
+@admin_router.get("/models")
+def admin_models(request: Request, _: Settings = Depends(require_admin)) -> dict:
+    llm = request.app.state.llm
+    return {"active": llm.chat_model, "available": llm.available_models(),
+            "embedding": llm.embedding_model, "dense_ready": request.app.state.store.dense_available}
+
+
+@admin_router.post("/models")
+def select_model(request: Request, model: str = Query(min_length=1),
+                 _: Settings = Depends(require_admin)) -> dict:
+    llm = request.app.state.llm
+    if model not in llm.available_models() or model.split(":")[0] == llm.embedding_model.split(":")[0]:
+        raise HTTPException(400, detail="Выберите установленную модель генерации")
+    llm.chat_model = model
+    return {"active": llm.chat_model}

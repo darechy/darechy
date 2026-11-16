@@ -6,7 +6,6 @@ import { AppCtx } from './context';
 import type { AsyncState } from './hooks';
 import { EXAMPLES, SITUATIONS, useT } from './i18n';
 import { Icon, situationIcon } from './icons';
-import { InlineChat, useInlineChat, useIsPhone } from './InlineChat';
 import { useU } from './ui';
 
 const MAX_SLIDES = 15;
@@ -94,8 +93,6 @@ export function Home() {
   const [search, setSearch] = useState('');
   const trackRef = useRef<HTMLDivElement | null>(null);
   const [edge, setEdge] = useState({ start: true, end: true });
-  const phone = useIsPhone();
-  const chat = useInlineChat();
 
   const query = search.trim().toLowerCase();
 
@@ -127,8 +124,7 @@ export function Home() {
 
   // На телефоне ответ появляется над полем ввода, на остальных экранах – боковая панель.
   const ask = (text: string) => {
-    if (phone) void chat.send(text);
-    else openAssistant({ text });
+    openAssistant({ text });
   };
 
   const onSubmit = (event: FormEvent) => {
@@ -146,17 +142,15 @@ export function Home() {
       <section className='hero'>
         <div className='wrap hero-grid'>
           <div>
-            <p className='eyebrow'>{t('hero_eyebrow')}</p>
             <h1>
               {t('hero_a')} <span>{t('hero_b')}</span>
             </h1>
             <p className='hero-sub'>{t('hero_sub')}</p>
             <form className='askbox' onSubmit={onSubmit}>
-              {phone && <InlineChat chat={chat} />}
               <label htmlFor='hero-q'>{t('ask_label')}</label>
               <div className='askbox-row'>
                 <input id='hero-q' value={question} onChange={(event) => setQuestion(event.target.value)} placeholder={t('ask_ph')} autoComplete='off' />
-                <button className='btn btn-primary btn-lg' type='submit' disabled={phone && chat.busy}>
+                <button className='btn btn-primary btn-lg' type='submit'>
                   {t('ask_btn')}
                 </button>
               </div>
@@ -164,7 +158,7 @@ export function Home() {
             <ul className='chips'>
               {EXAMPLES[lang].map((example) => (
                 <li key={example}>
-                  <button className='chip' type='button' disabled={phone && chat.busy} onClick={() => ask(example)}>
+                  <button className='chip' type='button' onClick={() => ask(example)}>
                     {example}
                   </button>
                 </li>
@@ -172,22 +166,7 @@ export function Home() {
             </ul>
           </div>
 
-          <aside className='principles' aria-label={t('principles')}>
-            <h2>{t('principles')}</h2>
-            <ul>
-              {[1, 2, 3, 4, 5].map((n) => (
-                <li key={n}>
-                  <span className='check'>
-                    <Icon name='check' size={18} />
-                  </span>
-                  <div>
-                    <h3>{n > 3 ? u(`p${n}_t`) : t(`p${n}_t`)}</h3>
-                    <p>{n > 3 ? u(`p${n}_d`) : t(`p${n}_d`)}</p>
-                  </div>
-                </li>
-              ))}
-            </ul>
-          </aside>
+
         </div>
       </section>
 
@@ -228,6 +207,25 @@ export function Home() {
           })}
         </div>
       </section>
+
+      <div className='wrap home-principles'>
+          <aside className='principles' aria-label={t('principles')}>
+            <h2>{t('principles')}</h2>
+            <ul>
+              {[1, 2, 3, 4, 5].map((n) => (
+                <li key={n}>
+                  <span className='check'>
+                    <Icon name='check' size={18} />
+                  </span>
+                  <div>
+                    <h3>{n > 3 ? u(`p${n}_t`) : t(`p${n}_t`)}</h3>
+                    <p>{n > 3 ? u(`p${n}_d`) : t(`p${n}_d`)}</p>
+                  </div>
+                </li>
+              ))}
+            </ul>
+          </aside>
+      </div>
 
       <section className='wrap section' id='services'>
         <div className='sec-head'>

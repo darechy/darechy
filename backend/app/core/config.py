@@ -24,10 +24,7 @@ class Settings(BaseSettings):
 
     # Локальная LLM
     ollama_base_url: str = "http://localhost:11434"
-    # 1.7b — осознанный выбор под 8 ГБ RAM (dev-машины команды): 4b/8b вместе
-    # с эмбеддингами уходят в своп. Задача модели узкая — сформулировать ответ
-    # строго по присланным фрагментам, а не «знать» право.
-    llm_model: str = "qwen3:1.7b"
+    llm_model: str = "qwen3:4b-instruct-2507-q4_K_M"
     # Эмбеддинги: bge-m3 — официальная модель в библиотеке Ollama, 1024 измерения,
     # многоязычная. `multilingual-e5-large` в Ollama нет (404 в реестре).
     embedding_model: str = "bge-m3"
@@ -42,7 +39,7 @@ class Settings(BaseSettings):
     # Скоуп поиска по услуге и ИИ-роутер. Флаги нужны, чтобы можно было
     # честно сравнить качество с ними и без, а не верить на слово.
     service_scoping: bool = True
-    ai_router: bool = True
+    ai_router: bool = False
     # Прогревать модели при старте: убирает «первый ответ 11 с» после простоя.
     warmup_on_start: bool = True
     # Переспрашивать услугу, если спросили про документы без привязки.
@@ -67,6 +64,9 @@ class Settings(BaseSettings):
     # Админка: правка базы знаний и каталога услуг без изменения кода
     # (см. docs/админка.md). Токен — обязателен; пусто = админка выключена.
     admin_token: str = ""
+    admin_accounts: dict[str, str] = {}
+    news_db: str = "news.sqlite3"
+    api_keys_db: Path = REPO_DIR / "infra" / "data" / "api_keys.sqlite3"
     services_file: Path = BACKEND_DIR / "app" / "data" / "services.json"
     taught_file: Path = REPO_DIR / "kb_corpus" / "taught" / "answers.json"
     # Черновики карточек услуг из перечня: лежат ОТДЕЛЬНО от рабочего каталога,

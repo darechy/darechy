@@ -86,13 +86,14 @@ cd backend
 python3 -m venv .venv
 source .venv/bin/activate        # Windows: .venv\Scripts\activate
 pip install -r requirements.txt
-cp .env.example .env             # ❗ позже впишем TELEGRAM_BOT_TOKEN
+cp -n .env.example .env          # не перезаписывает существующие настройки
 
 uvicorn app.main:app --reload
 ```
 
 Проверки:
 - http://localhost:8000/health — `{"status": "ok", ...}`
+- [Состояние моделей](http://localhost:8000/health/models) — доступность Ollama, наличие Qwen и BGE‑M3, готовность векторного индекса
 - http://localhost:8000/docs — автодокументация API (Swagger)
 - http://localhost:8000/api/services — каталог услуг (пока стаб)
 
@@ -102,13 +103,13 @@ uvicorn app.main:app --reload
 
 Регресс качества (API должен работать): `python3 eval/run_eval.py` из корня репо — прогон golden set, отчёт в `eval/history/`.
 
-Индексация корпуса (после того как появились `kb_corpus/curated/*.json`):
+API поднимает BM25 при запуске, затем готовит векторный индекс в фоне. Для ручной индексации после обновления `kb_corpus/curated/` выполните:
 
 ```bash
 python -m app.kb.ingest    # чанки → BM25; Qdrant поднят и модель есть → грузятся вектора
 ```
 
-Без Docker/Qdrant/Ollama всё работает: BM25 + экстрактивные ответы с цитатами (guardrail живой и в деградации).
+При недоступности Qdrant поиск работает на BM25. При недоступности Qwen ассистент использует извлечённые из корпуса фрагменты или сообщает, что подходящего источника нет.
 
 **Локальная модель:** какие модели качать, почему 1.7b, как настроить `keep_alive` под 8 ГБ RAM — [локальная-модель.md](docs/локальная-модель.md).
 
@@ -127,6 +128,28 @@ npm run dev
 ### 4. Правовая база (обоим, с дня 1)
 
 Полный конвейер — в [kb_corpus/README.md](kb_corpus/README.md). Коротко: трекер актов → скачать оригинал в `kb_corpus/raw/` → разобрать в `kb_corpus/curated/*.json` → кросс-проверка вторым напарником → индексация.
+
+### 5. Интеграции и Telegram
+
+1. Задайте случайный `ADMIN_TOKEN` в `backend/.env` и перезапустите API. Токен можно сгенерировать командой `python -c 'import secrets; print(secrets.token_urlsafe(32))'`.
+2. Откройте [дашборд](http://localhost:8000/api/admin), введите токен и создайте отдельный API-ключ для каждого сервиса. Дашборд показывает значение ключа один раз при выпуске.
+3. Передавайте ключ как `Authorization: Bearer <ключ>` в запросах к `/api/v1`. Для доступа с другой машины используйте HTTPS.
+
+| Метод и путь | Назначение |
+| --- | --- |
+| `POST /api/v1/chat` | Вопрос в поле `message`, необязательные `session_id` и `service_id`. Ответ содержит текст, цитаты и признак отказа |
+| `GET /api/v1/services`, `GET /api/v1/services/{id}` | Каталог и карточка услуги |
+| `GET /api/v1/situations`, `GET /api/v1/situations/{id}` | Жизненные ситуации |
+| `POST /api/v1/voice/transcribe` | Распознавание речи. Поле `file` в multipart |
+| `POST /api/v1/voice/synthesize` | Синтез речи. JSON с полями `text` и `lang` |
+
+Схемы запросов и ответов доступны в [Swagger](http://localhost:8000/docs).
+
+Для Telegram заполните `TELEGRAM_BOT_TOKEN` от BotFather и `TELEGRAM_API_KEY` из дашборда. `TELEGRAM_API_BASE_URL` по умолчанию указывает на `http://127.0.0.1:8000`. Запустите бот отдельным процессом из каталога `backend` с активным виртуальным окружением.
+
+```bash
+python -m app.bot.telegram
+```
 
 ---
 

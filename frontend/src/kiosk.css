@@ -22,7 +22,7 @@
   min-height: 68px;
   padding: 0 24px;
   border: 1px solid rgba(35, 56, 131, 0.22);
-  border-radius: 2px;
+  border-radius: var(--radius);
   background: #ffffff;
   color: var(--ink);
   font-size: 22px;
@@ -39,7 +39,7 @@
 
 .k-lang {
   border: 1px solid rgba(35, 56, 131, 0.22);
-  border-radius: 2px;
+  border-radius: var(--radius);
   background: #ffffff;
 }
 
@@ -78,7 +78,7 @@
   padding: 28px;
   background: #ffffff;
   border: 1px solid var(--line);
-  border-radius: 2px;
+  border-radius: var(--radius);
   box-shadow: 0 14px 40px rgba(35, 56, 131, 0.08);
 }
 
@@ -127,14 +127,11 @@
   font-size: 24px;
   font-weight: 700;
   cursor: pointer;
-  background: linear-gradient(120deg, #2563eb 0%, #5a4bf2 55%, #2563eb 100%);
-  background-size: 200% 200%;
-  background-position: 0% 50%;
+  background: var(--primary);
   transition: background-position 0.7s var(--ease-soft), opacity 0.3s var(--ease-soft);
 }
 
 .k-ask-send:active:not(:disabled) {
-  background-position: 100% 50%;
 }
 
 .k-ask-send:disabled {
@@ -154,7 +151,7 @@
 .k-chip {
   padding: 12px 22px;
   border: 1px solid var(--line);
-  border-radius: 999px;
+  border-radius: var(--radius);
   background: #f5f8ff;
   color: var(--ink);
   font-size: 20px;
@@ -177,7 +174,7 @@
   margin: 0;
   padding: 20px 28px;
   border: 0;
-  border-radius: 2px;
+  border-radius: var(--radius);
   box-shadow: 0 14px 30px rgba(90, 75, 242, 0.26);
 }
 
@@ -205,7 +202,7 @@
 .k-step,
 .k-list li,
 .k-facts {
-  border-radius: 2px;
+  border-radius: var(--radius);
   box-shadow: 0 8px 24px rgba(35, 56, 131, 0.06);
 }
 
@@ -230,7 +227,7 @@
   width: 58px;
   height: 58px;
   border: 1.5px solid var(--primary);
-  border-radius: 50%;
+  border-radius: var(--radius);
   background: #ffffff;
   color: var(--primary);
   font-family: var(--sans);
@@ -239,6 +236,6 @@
 
 .k-warn-card {
   border: 0;
-  border-radius: 2px;
+  border-radius: var(--radius);
   box-shadow: 0 30px 80px rgba(35, 56, 131, 0.35);
 }

@@ -10,6 +10,7 @@ MVP-ограничения (осознанно):
 - ПДн не храним: только текст диалога, ключ — анонимный session_id с фронта.
 """
 
+import threading
 import time
 from collections import OrderedDict
 
@@ -22,30 +23,43 @@ class SessionMemory:
         self.max_sessions = max_sessions
         self.ttl_seconds = ttl_hours * 3600
         # OrderedDict для LRU-вытеснения самых старых сессий
+        self._lock = threading.Lock()
         self._sessions: OrderedDict[str, tuple[float, list[dict]]] = OrderedDict()
 
     def history(self, session_id: str | None) -> list[dict]:
         """Реплики диалога в порядке следования: [{role, content}, ...]."""
-        entry = self._sessions.get(session_id or "")
-        if entry is None:
+        if not session_id:
             return []
-        stored_at, turns = entry
-        if time.time() - stored_at > self.ttl_seconds:
-            del self._sessions[session_id or ""]
+        with self._lock:
+            turns = self._active_turns(session_id, time.monotonic())
+            if turns:
+                self._sessions.move_to_end(session_id)
+            return [turn.copy() for turn in turns]
+
+    def _active_turns(self, session_id: str, now: float) -> list[dict]:
+        stored_at, turns = self._sessions.get(session_id, (now, []))
+        if now - stored_at > self.ttl_seconds:
+            del self._sessions[session_id]
             return []
-        self._sessions.move_to_end(session_id or "")
-        return list(turns)
+        return turns
 
     def append(self, session_id: str | None, role: str, content: str) -> None:
-        if not session_id or not content:
+        if content:
+            self._append(session_id, [{"role": role, "content": content}])
+
+    def append_exchange(self, session_id: str | None, user: str, assistant: str | None) -> None:
+        turns = [{"role": "user", "content": user}]
+        if assistant:
+            turns.append({"role": "assistant", "content": assistant})
+        self._append(session_id, turns)
+
+    def _append(self, session_id: str | None, turns: list[dict]) -> None:
+        if not session_id:
             return
-        _stored_at, turns = self._sessions.get(session_id, (time.time(), []))
-        turns.append({"role": role, "content": content})
-        # Держим чётное число реплик (пары вопрос-ответ), чтобы не склеить
-        # два вопроса подряд без ответов между ними.
-        while len(turns) > self.max_turns:
-            turns.pop(0)
-        self._sessions[session_id] = (time.time(), turns)
-        self._sessions.move_to_end(session_id)
-        while len(self._sessions) > self.max_sessions:
-            self._sessions.popitem(last=False)
+        with self._lock:
+            now = time.monotonic()
+            recent = self._active_turns(session_id, now) + turns
+            self._sessions[session_id] = (now, recent[-self.max_turns:])
+            self._sessions.move_to_end(session_id)
+            while len(self._sessions) > self.max_sessions:
+                self._sessions.popitem(last=False)

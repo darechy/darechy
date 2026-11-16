@@ -2,12 +2,15 @@
 
 import tempfile
 from pathlib import Path
+from subprocess import CalledProcessError, TimeoutExpired
 
 from fastapi import APIRouter, Depends, HTTPException, Request, Response, UploadFile
+from pydantic import BaseModel, Field
+from starlette.concurrency import run_in_threadpool
 
 from app.models.schemas import ChatRequest, ChatResponse, Situation
 from app.services.catalog import Catalog
-from app.voice.gateway import VoiceGateway
+from app.voice.gateway import AUDIO_INPUT_FORMATS, VoiceGateway
 
 
 def get_catalog(request: Request) -> Catalog:
@@ -52,13 +55,19 @@ def get_situation(situation_id: str, catalog: Catalog = Depends(get_catalog)) ->
     services = [catalog.get(sid) for sid in situation.service_ids]
     return {
         **situation.model_dump(),
-        "services": [s.model_dump() for s in services if s is not None],
+        "services": [s.model_dump() for s in services if s is not None and s.status != "черновик"],
     }
 
 
 @api_router.post("/chat", response_model=ChatResponse)
 def chat(body: ChatRequest, request: Request) -> ChatResponse:
+    return answer(body, request, namespace="portal")
+
+
+def answer(body: ChatRequest, request: Request, namespace: str) -> ChatResponse:
     orchestrator = request.app.state.orchestrator
+    if body.session_id:
+        body = body.model_copy(update={"session_id": f"{namespace}:{body.session_id}"})
     return orchestrator.answer(body)
 
 
@@ -73,22 +82,37 @@ async def transcribe(
             status_code=503,
             detail="Голосовой шлюз недоступен: не установлен ffmpeg",
         )
-    suffix = (file.filename or "audio.webm").rsplit(".", 1)[-1]
-    with tempfile.NamedTemporaryFile(suffix=f".{suffix}", delete=False) as fh:
-        fh.write(await file.read())
-        tmp = Path(fh.name)
+    suffix = Path(file.filename or "audio.webm").suffix.lower()
+    if suffix not in AUDIO_INPUT_FORMATS:
+        raise HTTPException(status_code=415, detail="Формат аудио не поддерживается")
+    limit = 10 * 1024 * 1024
+    if file.size is not None and file.size > limit:
+        raise HTTPException(status_code=413, detail="Аудиофайл больше 10 МиБ")
+    audio = await file.read(limit + 1)
+    if len(audio) > limit:
+        raise HTTPException(status_code=413, detail="Аудиофайл больше 10 МиБ")
+    if not audio:
+        raise HTTPException(status_code=422, detail="Пустой аудиофайл")
     try:
-        text = voice.transcribe_file(tmp)
-    except RuntimeError as exc:
-        raise HTTPException(status_code=503, detail=str(exc)) from exc
-    finally:
-        tmp.unlink(missing_ok=True)
+        with tempfile.TemporaryDirectory() as directory:
+            tmp = Path(directory) / f"audio{suffix}"
+            await run_in_threadpool(tmp.write_bytes, audio)
+            text = await run_in_threadpool(voice.transcribe_file, tmp)
+    except (CalledProcessError, TimeoutExpired) as exc:
+        raise HTTPException(status_code=422, detail="Не удалось прочитать аудио") from exc
+    except (RuntimeError, ImportError) as exc:
+        raise HTTPException(status_code=503, detail="Распознавание речи недоступно") from exc
     return {"text": text}
+
+
+class SynthesisRequest(BaseModel):
+    text: str = Field(min_length=1)
+    lang: str | None = None
 
 
 @api_router.post("/voice/synthesize")
 def synthesize(
-    body: dict,
+    body: SynthesisRequest,
     voice: VoiceGateway = Depends(get_voice),
 ) -> Response:
     """Текст → OGG/Opus (озвучка ответа на портале/киоске).
@@ -96,12 +120,12 @@ def synthesize(
     Тело: {"text": "...", "lang": "ru"}. Если TTS-окружение не готово — 503:
     фронт в этом случае просто показывает текст.
     """
-    text = (body or {}).get("text", "").strip()
+    text = body.text.strip()
     if not text:
         raise HTTPException(status_code=422, detail="Пустой text")
     if len(text) > 2000:
         text = text[:2000]  # ответ длиннее ~1,5 минут речи не озвучиваем
-    lang = (body or {}).get("lang") or "ru"
+    lang = body.lang or "ru"
     if not voice.tts_available():
         raise HTTPException(
             status_code=503,

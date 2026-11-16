@@ -19,9 +19,7 @@
 .k-btn.k-btn-primary {
   border-color: transparent;
   color: #ffffff;
-  background: linear-gradient(120deg, #2563eb 0%, #5a4bf2 55%, #2563eb 100%);
-  background-size: 200% 200%;
-  background-position: 0% 50%;
+  background: var(--primary);
 }
 
 .k-actions-row {
@@ -89,7 +87,7 @@
   width: 52px;
   height: 52px;
   border: 1.5px solid var(--primary);
-  border-radius: 50%;
+  border-radius: var(--radius);
   background: #ffffff;
   color: var(--primary);
   font-family: var(--sans);

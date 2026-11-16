@@ -128,9 +128,7 @@ a.tile:hover,
 .k-btn-primary,
 .k-voice,
 .voice-btn {
-  background: linear-gradient(120deg, #2563eb 0%, #5a4bf2 55%, #2563eb 100%);
-  background-size: 200% 200%;
-  background-position: 0% 50%;
+  background: var(--primary);
   border-color: transparent;
   color: #fff;
 }
@@ -139,9 +137,7 @@ a.tile:hover,
 .k-btn-primary:hover,
 .k-voice:hover,
 .voice-btn:hover:not(:disabled) {
-  background: linear-gradient(120deg, #2563eb 0%, #5a4bf2 55%, #2563eb 100%);
-  background-size: 200% 200%;
-  background-position: 100% 50%;
+  background: var(--primary);
   box-shadow: 0 8px 22px rgba(90, 75, 242, 0.28);
 }
 

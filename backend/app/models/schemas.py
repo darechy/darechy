@@ -3,6 +3,8 @@
 Каждое изменение здесь — синхронное изменение в api.ts у кента.
 """
 
+from typing import Literal
+
 from pydantic import BaseModel, Field
 
 
@@ -71,6 +73,7 @@ class ChatRequest(BaseModel):
     session_id: str | None = None
     # id услуги со страницы, с которой задан вопрос («спросить ассистента»)
     service_id: str | None = None
+    effort: Literal["quick", "standard", "deep"] = "standard"
     top_k: int = Field(default=6, ge=1, le=20)
 
 

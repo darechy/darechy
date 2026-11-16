@@ -132,12 +132,8 @@ function KioskHome() {
               );
             })}
             {busy && (
-              <div className='msg msg-bot msg-thinking'>
-                <span className='dots' aria-hidden='true'>
-                  <i />
-                  <i />
-                  <i />
-                </span>
+              <div className='msg msg-bot msg-thinking' role='status'>
+          <span className='thinking-pulse' aria-hidden='true' />
                 {t('thinking')}
               </div>
             )}

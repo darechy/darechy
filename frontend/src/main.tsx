@@ -15,6 +15,7 @@ import "./kiosk-bar.css";
 import "./mobile.css";
 import "./input-fit.css";
 import "./inline-chat.css";
+import "./glass.css";
 
 createRoot(document.getElementById("root")!).render(
   <StrictMode>

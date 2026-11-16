@@ -5,7 +5,7 @@
 Подменяется фейком в тестах.
 """
 
-import json
+import math
 
 import httpx
 
@@ -14,7 +14,7 @@ from app.core.config import Settings
 
 class LlmClient:
     def __init__(self, settings: Settings) -> None:
-        self.base_url = settings.ollama_base_url
+        self.base_url = settings.ollama_base_url.rstrip("/")
         self.chat_model = settings.llm_model
         self.embedding_model = settings.embedding_model
         self.embedding_dim = settings.embedding_dim
@@ -31,8 +31,7 @@ class LlmClient:
     def embed_batch(self, texts: list[str]) -> list[list[float]] | None:
         """Эмбеддинги пачкой. Порядок ответа = порядок входа (гарантия Ollama).
 
-        `keep_alive` короткий: на 8 ГБ RAM держать эмбеддинги и чат-модель
-        в памяти одновременно нельзя — уходим в своп.
+        Проверяем форму и числовые значения до передачи в Qdrant.
         """
         if not texts:
             return []
@@ -47,12 +46,20 @@ class LlmClient:
                 timeout=120.0,
             )
             resp.raise_for_status()
-        except httpx.HTTPError:
+            payload = resp.json()
+        except (httpx.HTTPError, ValueError):
             return None
-        embeddings = resp.json().get("embeddings")
-        if not embeddings or len(embeddings) != len(texts):
+        if not isinstance(payload, dict):
             return None
-        return [[float(x) for x in vector] for vector in embeddings]
+        embeddings = payload.get("embeddings")
+        if not isinstance(embeddings, list) or len(embeddings) != len(texts):
+            return None
+        for vector in embeddings:
+            if not isinstance(vector, list) or len(vector) != self.embedding_dim:
+                return None
+            if not all(type(value) in (float, int) and math.isfinite(value) for value in vector):
+                return None
+        return embeddings
 
     # --- генерация ----------------------------------------------------------
 
@@ -85,37 +92,57 @@ class LlmClient:
                 timeout=120.0,
             )
             resp.raise_for_status()
-        except httpx.HTTPError:
+            payload = resp.json()
+            if payload.get("done_reason") == "length":
+                return None
+            content = payload["message"]["content"]
+            if isinstance(content, str) and "<think>" in content:
+                if "</think>" not in content:
+                    return None
+                content = content.rsplit("</think>", 1)[1]
+        except (httpx.HTTPError, KeyError, TypeError, ValueError):
             return None
-        try:
-            return resp.json()["message"]["content"]
-        except (KeyError, json.JSONDecodeError):
-            return None
+        return content.strip() if isinstance(content, str) and content.strip() else None
 
     # --- доступность --------------------------------------------------------
 
-    def available_models(self) -> list[str]:
+    def _installed_models(self) -> list[str] | None:
         try:
             resp = httpx.get(f"{self.base_url}/api/tags", timeout=3.0)
             resp.raise_for_status()
-        except httpx.HTTPError:
-            return []
-        return [m["name"] for m in resp.json().get("models", [])]
+            payload = resp.json()
+        except (httpx.HTTPError, ValueError):
+            return None
+        models = payload.get("models") if isinstance(payload, dict) else None
+        if not isinstance(models, list):
+            return None
+        return [
+            model["name"]
+            for model in models
+            if isinstance(model, dict) and isinstance(model.get("name"), str)
+        ]
+
+    def available_models(self) -> list[str]:
+        return self._installed_models() or []
 
     def ping(self) -> bool:
         """Ollama отвечает (не значит, что модели скачаны)."""
-        try:
-            resp = httpx.get(f"{self.base_url}/api/tags", timeout=2.0)
-            return resp.status_code == 200
-        except httpx.HTTPError:
-            return False
+        return self._installed_models() is not None
 
     def chat_ready(self) -> bool:
         """Скачана ли именно наша чат-модель — иначе будет экстрактивный режим."""
-        models = self.available_models()
-        if not models:
-            return False
-        # Ollama отдаёт имена с тегом (`qwen3:1.7b`), сверяем и без тега.
-        wanted = {self.chat_model, self.chat_model.split(":")[0]}
-        return any(name in wanted for name in models)
+        return self.model_status()["chat_installed"]
+
+    def model_status(self) -> dict[str, bool]:
+        models = self._installed_models()
+
+        def tagged(name: str) -> str:
+            return name if ":" in name.rsplit("/", 1)[-1] else f"{name}:latest"
+
+        installed = {tagged(name) for name in models or []}
+        return {
+            "ollama_reachable": models is not None,
+            "chat_installed": tagged(self.chat_model) in installed,
+            "embedding_installed": tagged(self.embedding_model) in installed,
+        }
 

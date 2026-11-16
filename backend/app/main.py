@@ -1,17 +1,20 @@
+import asyncio
 import logging
 from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
+from app.api.news import news_router
 from app.api.admin_routes import admin_router
+from app.api.integration_routes import integration_router
 from app.api.routes import api_router
-from app.bot.telegram import build_bot
 from app.chat.orchestrator import Orchestrator
 from app.chat.router import ServiceRouter
 from app.chat.taught import TaughtStore
 from app.core.config import get_settings
 from app.kb.ingest import collect_chunks, load_curated
+from app.llm.client import LlmClient
 from app.retrieval.store import ChunkStore
 from app.services.catalog import build_catalog
 from app.services.draft_store import DraftStore
@@ -23,12 +26,7 @@ logger = logging.getLogger(__name__)
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    """Сборка зависимостей при старте: каталог, корпус, оркестратор, бот.
-
-    Ничего критичного здесь не падает: нет Docker/Qdrant/Ollama — API живёт
-    в деградированном режиме (BM25 + экстрактивные ответы), что важно для
-   dev-машин без инфры.
-    """
+    """Поднимает каталог и BM25, затем готовит локальные модели и dense-индекс."""
     settings = get_settings()
     app.state.settings = settings
     app.state.catalog = build_catalog(settings)
@@ -38,6 +36,7 @@ async def lifespan(app: FastAPI):
         qdrant_url=settings.qdrant_url if settings.use_qdrant else None,
         embedding_dim=settings.embedding_dim,
         allowed_statuses=settings.allowed_statuses,
+        embedding_model=settings.embedding_model,
     )
     llm = _make_llm(settings)
     docs, errors = load_curated(settings.corpus_dir)
@@ -68,34 +67,35 @@ async def lifespan(app: FastAPI):
         taught=app.state.taught,
     )
 
-    # Прогрев моделей: первый запрос после простоя платит за загрузку весов
-    # (замерено: 11,6 с против 3,5 с на прогретом). На демо это выглядело бы
-    # как «ассистент тормозит» на первом же вопросе.
-    if settings.warmup_on_start:
-        _warmup(llm)
-
-    bot_result = build_bot(settings, app.state.orchestrator, app.state.voice)
-    app.state.bot = None
-    if bot_result:
-        bot, dp = bot_result
-        app.state.bot = bot
-        app.state.dp = dp
-    yield
-
-
-def _warmup(llm) -> None:
-    """Грузит модель генерации и эмбеддингов в память до первого запроса."""
+    startup = asyncio.create_task(
+        asyncio.to_thread(_prepare_models, store, llm, settings.warmup_on_start)
+    )
     try:
-        llm.embed("прогрев")
-        llm.chat("Ответь одним словом.", "прогрев", max_tokens=1)
-        logger.info("Модели прогреты")
-    except Exception as exc:  # прогрев не критичен: сервис работает и без него
-        logger.warning("Прогрев не удался: %s", exc)
+        yield
+    finally:
+        startup.cancel()
+        await asyncio.gather(startup, return_exceptions=True)
+
+
+def _prepare_models(store: ChunkStore, llm: LlmClient, warmup: bool) -> None:
+    status = llm.model_status()
+    if not status["ollama_reachable"]:
+        logger.warning("Ollama недоступна. Поиск работает на BM25.")
+        return
+    if status["embedding_installed"]:
+        count = store.dense_index(llm)
+        logger.info("Векторов в индексе: %d", count)
+    else:
+        logger.warning("Модель эмбеддингов не найдена: %s", llm.embedding_model)
+    if not status["chat_installed"]:
+        logger.warning("Модель чата не найдена: %s", llm.chat_model)
+    elif warmup:
+        result = llm.chat("Ответь одним словом.", "Привет", max_tokens=4)
+        if result is None:
+            logger.warning("Модель чата не ответила на запрос прогрева.")
 
 
 def _make_llm(settings):
-    from app.llm.client import LlmClient
-
     return LlmClient(settings)
 
 
@@ -116,9 +116,11 @@ app.add_middleware(
 )
 
 app.include_router(api_router)
+app.include_router(integration_router)
 # Админка: правка базы знаний, каталога услуг и доучивание — без изменения кода.
 # Включается только если задан ADMIN_TOKEN.
 app.include_router(admin_router, prefix="/api")
+app.include_router(news_router)
 
 
 @app.get("/health")
@@ -126,3 +128,18 @@ def health() -> dict:
     """Живость API: docker healthcheck и мониторинг."""
     settings = getattr(app.state, "settings", None) or get_settings()
     return {"status": "ok", "env": settings.app_env, "version": app.version}
+
+
+@app.get("/health/models")
+def model_health() -> dict:
+    """Показывает доступность Ollama, моделей и векторного индекса."""
+    settings = getattr(app.state, "settings", None) or get_settings()
+    llm = getattr(app.state, "llm", None) or _make_llm(settings)
+    store = getattr(app.state, "store", None)
+    return {
+        **llm.model_status(),
+        "chat_model": llm.chat_model,
+        "embedding_model": settings.embedding_model,
+        "dense_enabled": settings.use_qdrant,
+        "dense_ready": bool(store and store.dense_available),
+    }

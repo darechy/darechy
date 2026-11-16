@@ -1,0 +1,63 @@
+{
+  "_comment": "Проверочные формулировки составлены после настройки. Этот набор не использован для настройки RAG в первом прогоне.",
+  "cases": [
+    {
+      "id": "check-01",
+      "type": "fact",
+      "question": "Уже семь месяцев после родов, можно ли ещё обратиться за пособием при рождении?",
+      "expected_refusal": false,
+      "expected_citation_contains": "статья 22",
+      "expected_doc_number": "7-З"
+    },
+    {
+      "id": "check-02",
+      "type": "fact",
+      "question": "С какого момента прекращается выплата государственных пособий?",
+      "expected_refusal": false,
+      "expected_citation_contains": "статья 24",
+      "expected_doc_number": "7-З"
+    },
+    {
+      "id": "check-03",
+      "type": "fact",
+      "question": "Если с решением по пособию не согласны, как его оспорить?",
+      "expected_refusal": false,
+      "expected_citation_contains": "статья 23",
+      "expected_doc_number": "7-З"
+    },
+    {
+      "id": "check-04",
+      "type": "fact",
+      "question": "Подскажите, какие бумаги приготовить для оформления пособия на погребение?",
+      "expected_refusal": false,
+      "expected_citation_contains": "позиция 2.35",
+      "expected_doc_number": "200"
+    },
+    {
+      "id": "check-05",
+      "type": "fact",
+      "question": "Ребёнку ещё нет трёх лет, кто из семьи вправе оформить пособие по уходу?",
+      "expected_refusal": false,
+      "expected_citation_contains": "статья 12",
+      "expected_doc_number": "7-З"
+    },
+    {
+      "id": "check-06",
+      "type": "refusal",
+      "question": "Нужна ли отдельная справка из бухгалтерии другого родителя, если подаю на пособие по уходу?",
+      "expected_refusal": true
+    },
+    {
+      "id": "check-07",
+      "type": "refusal",
+      "question": "Посоветуй фильм на вечер про многодетную семью",
+      "expected_refusal": true
+    },
+    {
+      "id": "check-08",
+      "type": "refusal",
+      "question": "Как испечь шарлотку без сахара?",
+      "expected_refusal": true
+    }
+  ]
+}

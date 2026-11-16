@@ -52,6 +52,7 @@ def ingest(settings: Settings, llm=None) -> tuple[int, int]:
         qdrant_url=settings.qdrant_url if settings.use_qdrant else None,
         embedding_dim=settings.embedding_dim,
         allowed_statuses=settings.allowed_statuses,
+        embedding_model=settings.embedding_model,
     )
     indexed = store.rebuild(chunks)
 

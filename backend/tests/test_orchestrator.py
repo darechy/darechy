@@ -82,7 +82,7 @@ def test_extractive_fallback_when_llm_down(env) -> None:
     orch = Orchestrator(settings, store, FakeLlm())  # chat_script пуст → None
     response = orch.answer(ChatRequest(message="размер пособия базовая величина"))
     assert not response.refusal
-    assert "дословно из нормативного акта" in response.answer
+    assert "Фрагмент нормативного акта" in response.answer
     assert len(response.citations) == 1
 
 
@@ -173,3 +173,31 @@ def test_checklist_answer_disabled_falls_back(env) -> None:
                         router=router)
     response = orch.answer(ChatRequest(message="какие документы нужны для регистрации брака"))
     assert response.source != "checklist"
+
+
+@pytest.mark.parametrize("message", [
+    "У меня умерла кошка. Что делать?",
+    "Меня уволили, мне очень тяжело",
+    "Я потерял маму, мне одиноко",
+])
+def test_personal_distress_bypasses_retrieval(env, monkeypatch, message):
+    settings, store = env
+    def unexpected_search(*args, **kwargs):
+        pytest.fail("Personal support should not retrieve legal documents")
+    monkeypatch.setattr(store, "search", unexpected_search)
+    orch = Orchestrator(settings, store, FakeLlm(chat_script=["Мне очень жаль. Расскажите, чем помочь."]))
+    response = orch.answer(ChatRequest(message=message, session_id="support"))
+    assert response.source == "conversation"
+    assert response.suggested_services == []
+    assert not response.refusal
+    assert orch.sessions.history("support")[-1]["content"] == response.answer
+
+
+def test_distress_with_legal_question_keeps_citations(env):
+    settings, store = env
+    orch = Orchestrator(settings, store, FakeLlm(
+        chat_script=["Размер пособия определяется базовой величиной [a_p2]."]
+    ))
+    response = orch.answer(ChatRequest(message="У меня умер муж, какой размер пособия?"))
+    assert response.answer.startswith("Мне жаль")
+    assert response.citations

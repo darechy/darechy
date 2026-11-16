@@ -6,6 +6,7 @@
 """
 
 import httpx
+import pytest
 
 from app.core.config import Settings
 from app.llm.client import LlmClient
@@ -51,7 +52,7 @@ def test_chat_ready_true_when_model_present(monkeypatch) -> None:
         "app.llm.client.httpx.get",
         lambda url, timeout=None: _Resp({"models": [{"name": "qwen3:1.7b"}]}),
     )
-    client = _client()
+    client = _client(llm_model="qwen3:1.7b")
     assert client.chat_ready() is True
 
 
@@ -90,7 +91,7 @@ def test_embed_batch_sends_keep_alive(monkeypatch) -> None:
         return _Resp({"embeddings": [[0.1, 0.2]]})
 
     monkeypatch.setattr("app.llm.client.httpx.post", fake_post)
-    client = _client(embed_keep_alive="5m")
+    client = _client(embed_keep_alive="5m", embedding_dim=2)
     assert client.embed_batch(["текст"]) == [[0.1, 0.2]]
     assert sent["keep_alive"] == "5m"
     assert sent["input"] == ["текст"]
@@ -103,6 +104,26 @@ def test_embed_batch_rejects_short_response(monkeypatch) -> None:
         lambda url, json=None, timeout=None: _Resp({"embeddings": [[0.1]]}),
     )
     assert _client().embed_batch(["a", "b"]) is None
+
+
+@pytest.mark.parametrize("payload", [None, [], {"embeddings": [[0.1]]},
+                                     {"embeddings": [[0.1, float("nan")]]},
+                                     {"embeddings": [[0.1, "0.2"]]}])
+def test_embed_rejects_bad_model_output(monkeypatch, payload) -> None:
+    monkeypatch.setattr("app.llm.client.httpx.post", lambda *a, **kw: _Resp(payload))
+    assert _client(embedding_dim=2).embed("текст") is None
+
+
+def test_model_status_checks_exact_tag_with_latest_default(monkeypatch) -> None:
+    monkeypatch.setattr(
+        "app.llm.client.httpx.get",
+        lambda *a, **kw: _Resp({"models": [{"name": "bge-m3:latest"}, {"name": "qwen3"}]}),
+    )
+    assert _client().model_status() == {
+        "ollama_reachable": True,
+        "chat_installed": False,
+        "embedding_installed": True,
+    }
 
 
 # --- маркеры ссылок в ответе модели -----------------------------------------
@@ -134,3 +155,14 @@ def test_markers_are_stripped_from_user_visible_answer() -> None:
     cleaned = _strip_markers("Пособие назначается [7-Z_st-12-п-1] лицам.")
     assert "[" not in cleaned and "7-Z" not in cleaned
     assert "Пособие назначается" in cleaned
+
+
+@pytest.mark.parametrize(("payload", "expected"), [
+    ({"done_reason": "length", "message": {"content": "Оборванный ответ"}}, None),
+    ({"message": {"content": "<think>Черновик"}}, None),
+    ({"message": {"content": "<think>Черновик</think> 219"}}, "219"),
+    ({"message": {"thinking": "Черновик", "content": "219"}}, "219"),
+])
+def test_chat_returns_only_completed_visible_answer(monkeypatch, payload, expected):
+    monkeypatch.setattr("app.llm.client.httpx.post", lambda *args, **kwargs: _Resp(payload))
+    assert _client().chat("система", "вопрос") == expected

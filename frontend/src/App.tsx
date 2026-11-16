@@ -1,3 +1,5 @@
+import CookieNotice from './CookieNotice';
+import News from "./News";
 import { flushSync } from 'react-dom';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 
@@ -82,9 +84,13 @@ function Shell() {
       voice: options?.voice,
       nonce: (prev?.nonce ?? 0) + 1,
     }));
-    setOpen(true);
+    if (KIOSK) setOpen(true);
+    else window.location.hash = "/chat";
   }, []);
-  const closeAssistant = useCallback(() => setOpen(false), []);
+  const closeAssistant = useCallback(() => {
+    if (KIOSK) setOpen(false);
+    else window.location.hash = "/";
+  }, []);
 
   useEffect(() => {
     document.documentElement.classList.toggle('kiosk', KIOSK);
@@ -140,7 +146,7 @@ function Shell() {
     <AppCtx.Provider value={ctx}>
       {KIOSK ? (
         <KioskApp key={session} route={route} />
-      ) : (
+      ) : route.name !== "chat" && (
         <>
           <a className='skip' href='#main' onClick={(e) => { e.preventDefault(); document.getElementById('main')?.focus(); }}>
             {t('skip')}
@@ -153,6 +159,7 @@ function Shell() {
               </a>
               <nav className='nav' aria-label='main'>
                 <a href='#/situations'>{t('nav_situations')}</a>
+                <a href='#/news'>{lang === 'be' ? 'Навіны' : 'Новости'}</a>
                 <a href='#/services'>{t('nav_services')}</a>
                 <div className='lang' role='group' aria-label='language'>
                   {(['ru', 'be'] as Lang[]).map((code) => (
@@ -169,6 +176,7 @@ function Shell() {
           </header>
           <main id='main' tabIndex={-1}>
             {route.name === 'home' && <Home />}
+            {route.name === 'news' && <News lang={lang} />}
             {route.name === 'situation' && <SituationPage id={route.id} />}
             {route.name === 'service' && <ServicePage id={route.id} />}
             {route.name === 'notfound' && <NotFound />}
@@ -181,7 +189,8 @@ function Shell() {
           </footer>
         </>
       )}
-      <Assistant key={session} open={open} onClose={closeAssistant} request={request} />
+      {!KIOSK && <CookieNotice be={lang === "be"} hidden={route.name === "chat"} />}
+      <Assistant key={session} page={!KIOSK} open={KIOSK ? open : route.name === "chat"} onClose={closeAssistant} request={request} />
       {KIOSK && warn && (
         <div className='k-warn' role='alertdialog' aria-label={u('k_still')}>
           <div className='k-warn-card'>

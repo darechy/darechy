@@ -33,7 +33,7 @@ button, input { font: inherit; color: inherit; }
 .skip { position: absolute; left: -999px; background: var(--ink); color: #fff; padding: 8px; }
 .skip:focus { left: 8px; top: 8px; }
 
-.btn { border: 1px solid transparent; border-radius: 2px; padding: 10px 16px; font-weight: 600; cursor: pointer; text-decoration: none; display: inline-flex; align-items: center; justify-content: center; gap: 8px; }
+.btn { border: 1px solid transparent; border-radius: var(--radius); padding: 10px 16px; font-weight: 600; cursor: pointer; text-decoration: none; display: inline-flex; align-items: center; justify-content: center; gap: 8px; }
 .btn-lg { padding: 12px 18px; }
 .btn-primary { background: var(--primary); color: #fff; }
 .btn-primary:hover:not(:disabled) { background: var(--primary-dark); }
@@ -63,16 +63,16 @@ button, input { font: inherit; color: inherit; }
 .askbox { margin-top: 22px; }
 .askbox label { display: block; font-size: 13px; font-weight: 700; margin-bottom: 6px; }
 .askbox-row { display: flex; border: 1px solid var(--ink); background: var(--surface); }
-.askbox input, .search input, .asst-form input { border: 0; background: transparent; border-radius: 0; }
+.askbox input, .search input, .asst-form input { border: 0; background: transparent; border-radius: var(--radius); }
 .askbox input { flex: 1; padding: 12px 14px; font-size: 16px; outline: none; }
 .chips { list-style: none; padding: 0; margin: 12px 0 0; display: flex; flex-wrap: wrap; gap: 8px; }
-.chip { border: 1px solid var(--line); background: var(--surface); border-radius: 2px; padding: 6px 10px; font-size: 13px; cursor: pointer; }
+.chip { border: 1px solid var(--line); background: var(--surface); border-radius: var(--radius); padding: 6px 10px; font-size: 13px; cursor: pointer; }
 .chip:hover { border-color: var(--primary); }
 
 .principles, .tile, .svc, .route-card, .channel, .facts > div, .checklist label, .k-tile, .k-step, .k-list li, .k-facts > div {
   background: var(--surface);
   border: 1px solid var(--line);
-  border-radius: 2px;
+  border-radius: var(--radius);
 }
 .principles { padding: 20px; }
 .principles h2 { font-size: 20px; margin-bottom: 14px; }
@@ -167,14 +167,14 @@ button, input { font: inherit; color: inherit; }
 .k-lang button { min-height: 64px; min-width: 68px; font-size: 18px; }
 .k-actions > .k-btn { order: 2; }
 .k-actions > .k-btn:first-child { margin-left: auto; }
-.k-btn { min-height: 64px; padding: 0 16px; border: 1px solid var(--ink); background: var(--surface); border-radius: 2px; font-weight: 650; font-size: 20px; display: inline-flex; align-items: center; gap: 8px; text-decoration: none; cursor: pointer; }
+.k-btn { min-height: 64px; padding: 0 16px; border: 1px solid var(--ink); background: var(--surface); border-radius: var(--radius); font-weight: 650; font-size: 20px; display: inline-flex; align-items: center; gap: 8px; text-decoration: none; cursor: pointer; }
 .k-btn-primary, .k-voice, .voice-btn { background: var(--primary); color: #fff; border-color: var(--primary); }
 .k-wide { width: 100%; margin-top: 16px; }
 .k-main { width: min(1000px, 100%); margin: 0 auto; padding: 28px 24px 40px; }
 .k-title { font-size: 2em; }
 .k-sub, .voice-hint { color: var(--ink-2); font-size: 20px; margin-top: 6px; }
 .k-h2 { font-size: 1.3em; margin: 18px 0 10px; }
-.k-voice, .voice-btn { width: 100%; border-radius: 2px; cursor: pointer; text-align: left; }
+.k-voice, .voice-btn { width: 100%; border-radius: var(--radius); cursor: pointer; text-align: left; }
 .k-voice { display: flex; align-items: center; gap: 16px; padding: 18px 20px; margin: 18px 0 22px; }
 .k-voice-ic, .voice-ic { width: 56px; height: 56px; border: 1px solid rgba(255,255,255,0.7); display: grid; place-items: center; transform: rotate(45deg); flex: none; }
 .k-voice-ic svg, .voice-ic svg { transform: rotate(-45deg); }

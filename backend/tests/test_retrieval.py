@@ -114,28 +114,37 @@ class _FakeResponse:
 class _RecordingQdrant:
     """Подменяет httpx-вызовы store: пишет, что и куда улетело."""
 
-    def __init__(self, *, collection_exists: bool = False, vector_size: int = 8) -> None:
-        self.collection_exists = collection_exists
-        self.vector_size = vector_size
+    def __init__(self) -> None:
+        self.collections: dict[str, dict] = {}
         self.created: list[dict] = []
         self.upserted: list[list[dict]] = []
         self.deleted: list[str] = []
 
     def get(self, url, timeout=None):
-        if url.endswith("/collections/darechy") and self.collection_exists:
-            return _FakeResponse(
-                payload={
-                    "result": {"config": {"params": {"vectors": {"size": self.vector_size}}}}
-                }
-            )
-        return _FakeResponse(status_code=404, payload={"status": "error"})
+        if url in self.collections:
+            return _FakeResponse()
+        return _FakeResponse(status_code=404)
 
-    def put(self, url, json=None, timeout=None):
+    def put(self, url, json=None, timeout=None, params=None):
         if url.endswith("/points"):
+            assert params == {"wait": "true"}
             self.upserted.append(json["points"])
+            collection = self.collections[url.removesuffix("/points")]
+            collection.update({point["id"]: point for point in json["points"]})
         else:
+            self.collections[url] = {}
             self.created.append(json)
         return _FakeResponse()
+
+    def post(self, url, json=None, timeout=None):
+        if url.endswith("/points/count"):
+            assert json == {"exact": True}
+            count = len(self.collections[url.removesuffix("/points/count")])
+            return _FakeResponse(payload={"result": {"count": count}})
+        collection = self.collections[url.removesuffix("/points/search")]
+        return _FakeResponse(payload={
+            "result": [{**point, "score": 0.9} for point in collection.values()],
+        })
 
     def delete(self, url, timeout=None):
         self.deleted.append(url)
@@ -145,6 +154,7 @@ class _RecordingQdrant:
 def _patch_qdrant(monkeypatch, fake: _RecordingQdrant) -> None:
     monkeypatch.setattr("app.retrieval.store.httpx.get", fake.get)
     monkeypatch.setattr("app.retrieval.store.httpx.put", fake.put)
+    monkeypatch.setattr("app.retrieval.store.httpx.post", fake.post)
     monkeypatch.setattr("app.retrieval.store.httpx.delete", fake.delete)
 
 
@@ -158,7 +168,7 @@ def test_dense_index_without_qdrant_is_noop() -> None:
 def test_dense_index_creates_collection_and_upserts_points(monkeypatch) -> None:
     store = ChunkStore(qdrant_url="http://qdrant:6333")
     store.rebuild([make_chunk("a_p1", "Текст про пособие.")])
-    fake = _RecordingQdrant(collection_exists=False)
+    fake = _RecordingQdrant()
     _patch_qdrant(monkeypatch, fake)
 
     assert store.dense_index(FakeLlm()) == 1
@@ -170,33 +180,49 @@ def test_dense_index_creates_collection_and_upserts_points(monkeypatch) -> None:
     assert store.dense_available is True
 
 
-def test_dense_index_recreates_collection_on_dimension_mismatch(monkeypatch) -> None:
-    """Коллекция под старую модель — вектора молча не найдутся, поэтому пересоздаём."""
-    store = ChunkStore(qdrant_url="http://qdrant:6333")
-    store.rebuild([make_chunk("a_p1", "Текст про пособие.")])
-    fake = _RecordingQdrant(collection_exists=True, vector_size=1024)
+def test_dense_index_reuses_complete_revision_and_preserves_old_collections(monkeypatch) -> None:
+    url = "http://qdrant:6333"
+    fake = _RecordingQdrant()
+    fake.collections[f"{url}/collections/darechy"] = {"legacy": {}}
     _patch_qdrant(monkeypatch, fake)
 
-    store.dense_index(FakeLlm())
-    assert fake.deleted, "коллекция с чужой размерностью должна быть удалена"
-    assert fake.created == [{"vectors": {"size": 8, "distance": "Cosine"}}]
+    for text in ["Текст про пособие.", "Новая редакция нормы."]:
+        store = ChunkStore(qdrant_url=url)
+        store.rebuild([make_chunk("a_p1", text)])
+        assert store.dense_index(FakeLlm()) == 1
+        assert store.dense_index(FakeLlm()) == 1
+        assert store.search_dense("пособие", FakeLlm())[0].chunk.text == text
+
+    assert len(fake.collections) == 3
+    assert len(fake.upserted) == 2
+    assert not fake.deleted
 
 
-def test_dense_index_recreates_collection_to_purge_stale_points(monkeypatch) -> None:
-    """Коллекция пересоздаётся даже при совпадении размерности — иначе мусор.
+def test_dense_partial_upload_is_not_searchable(monkeypatch) -> None:
+    class PartialEmbedding(FakeLlm):
+        def embed_batch(self, texts):
+            return None if texts == ["Новая редакция нормы."] else super().embed_batch(texts)
 
-    Реальный баг: id точки — uuid5 от chunk_id. После переименования чанков
-    старые векторы остаются навсегда: в коллекции лежало 455 точек вместо 180,
-    и dense-поиск выдавал чанки, которых в корпусе уже нет.
-    """
-    store = ChunkStore(qdrant_url="http://qdrant:6333")
-    store.rebuild([make_chunk("a_p1", "Текст про пособие.")])
-    fake = _RecordingQdrant(collection_exists=True, vector_size=8)
+    fake = _RecordingQdrant()
     _patch_qdrant(monkeypatch, fake)
+    store = ChunkStore(qdrant_url="http://qdrant:6333")
+    store.rebuild([
+        make_chunk("a_p1", "Текст про пособие."),
+        make_chunk("a_p2", "Новая редакция нормы."),
+    ])
+    assert store.dense_index(PartialEmbedding(), batch_size=1) == 0
+    assert not store.dense_available
+    assert store.search_dense("пособие", FakeLlm()) == []
+    assert store.dense_index(FakeLlm(), batch_size=1) == 2
+    assert store.dense_available
 
-    store.dense_index(FakeLlm())
-    assert fake.deleted, "коллекцию нужно пересоздавать, чтобы не копить старые векторы"
-    assert fake.created == [{"vectors": {"size": 8, "distance": "Cosine"}}]
+
+def test_article_title_counts_as_retrieval_evidence() -> None:
+    store = ChunkStore()
+    chunk = make_chunk("a_p1", "Указанная мера назначается уполномоченным органом.")
+    chunk.title = "Порядок выплаты пособия"
+    store.rebuild([chunk, make_chunk("a_p2", "Прекращение выплаты пособия.")])
+    assert store.search_bm25("порядок выплаты пособия")[0].chunk.chunk_id == "a_p1"
 
 
 def test_dense_index_bails_out_without_embeddings(monkeypatch) -> None:

@@ -3,91 +3,320 @@
 <head>
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1" />
-<title>ДаРэчы — админка</title>
+<title>ДаРэчы — панель управления</title>
 <style>
   :root {
-    --paper: #f7f4ee; --ink: #23201c; --line: #d8d2c6; --accent: #8c2f22;
-    --ok: #2f6b3f; --warn: #a8631a; --muted: #6f675c;
+    --radius: 16px;
+    color-scheme: light;
+    --paper: #eef1fa; --surface: #f8f9fd; --ink: #172045; --nav: #14235a;
+    --line: #cad1e6; --primary: #3d4fea; --blue-soft: #e8ebfc; --accent: #9b332f;
+    --ok: #216444; --warn: #85551b; --muted: #536281;
+    font: 15px/1.55 "Inter", system-ui, -apple-system, "Segoe UI", sans-serif;
   }
   * { box-sizing: border-box; }
+  [hidden] { display: none !important; }
   body {
-    margin: 0; background: var(--paper); color: var(--ink);
-    font: 15px/1.5 ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
+    margin: 0; min-height: 100vh; color: var(--ink); background: var(--paper);
+    display: grid; grid-template: auto 1fr / 240px minmax(0, 1fr);
   }
   header {
-    position: sticky; top: 0; z-index: 10; background: var(--paper);
-    border-bottom: 2px solid var(--ink); padding: 14px 20px;
-    display: flex; gap: 16px; align-items: center; flex-wrap: wrap;
+    grid-column: 1 / -1; display: flex; justify-content: space-between; align-items: center;
+    gap: 14px 24px; padding: 14px clamp(18px, 3vw, 40px); background: var(--surface);
+    border-bottom: 1px solid var(--line); position: sticky; top: 0; z-index: 2;
   }
-  header h1 { font-size: 18px; margin: 0; letter-spacing: .3px; }
-  header .token { margin-left: auto; display: flex; gap: 8px; align-items: center; }
-  nav { display: flex; gap: 4px; padding: 12px 20px 0; flex-wrap: wrap; }
+  header::after {
+    content: ""; position: absolute; inset: 100% 0 auto; height: 18px;
+    pointer-events: none; background: linear-gradient(var(--surface), transparent);
+  }
+  @supports ((backdrop-filter: blur(10px)) and (mask-image: linear-gradient(black, transparent))) {
+    header::after {
+      background: var(--surface);
+      background: color-mix(in srgb, var(--surface) 65%, transparent);
+      backdrop-filter: blur(10px); mask-image: linear-gradient(black, transparent);
+    }
+  }
+  .brand { display: flex; align-items: center; gap: 12px; min-width: 0; }
+  .brand img { width: 116px; height: auto; flex: none; }
+  .brand strong { display: block; font-size: 18px; line-height: 1.2; }
+  .brand span { color: var(--muted); font-size: 12px; }
+  .header-actions, .token { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
+  .token label { margin: 0; }
+  .token input { width: 175px; }
+  #connPill { white-space: nowrap; }
+  nav {
+    background: radial-gradient(ellipse at 25% 8%, #3543cb 0%, var(--nav) 54%, #10162c 100%);
+    color: white; display: flex; flex-direction: column;
+    gap: 6px; padding: 30px 16px; align-items: stretch;
+  }
   nav button {
-    background: none; border: 1px solid var(--line); border-bottom: none;
-    padding: 8px 14px; cursor: pointer; font: inherit; border-radius: 6px 6px 0 0;
+    display: flex; align-items: center; gap: 10px; text-align: left; color: #e6ebfb;
+    background: transparent; border: 1px solid transparent; border-radius: var(--radius);
+    padding: 10px 12px; cursor: pointer; font: inherit;
   }
-  nav button[aria-selected="true"] { background: #fff; border-color: var(--ink); font-weight: 600; }
-  main { padding: 0 20px 60px; }
-  section { display: none; background: #fff; border: 1px solid var(--ink); border-radius: 0 6px 6px 6px; padding: 20px; }
+  nav button svg { width: 18px; height: 18px; flex: none; }
+  nav button:hover { background: #263968; }
+  nav button[aria-current="page"] { background: #304784; border-color: #53679e; color: white; font-weight: 650; }
+  main { min-width: 0; padding: 36px clamp(18px, 4vw, 56px) 56px; background: radial-gradient(ellipse at 90% 0, #dce0fa 0%, transparent 55%); }
+  .intro { max-width: 1120px; margin: 0 auto; }
+  .intro h1 { margin: 0 0 8px; color: #263a83; font-size: clamp(30px, 4.5vw, 52px); line-height: 1.08; letter-spacing: -.045em; }
+  #diagnosticAnswer { white-space: pre-wrap; overflow-wrap: anywhere; }
+  .intro p { margin: 0; color: var(--muted); }
+  .stats {
+    display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px;
+    max-width: 1120px; margin: 24px auto 18px;
+  }
+  .stats div { background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius); padding: 14px 18px; }
+  .stats span { color: var(--muted); font-size: 13px; }
+  .stats strong { display: block; margin-top: 2px; font-size: clamp(22px, 3vw, 34px); line-height: 1.2; font-variant-numeric: tabular-nums; }
+  section {
+    display: none; min-width: 0; max-width: 1120px; margin: 24px auto 0;
+    background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius);
+    padding: clamp(18px, 3vw, 32px); box-shadow: 0 8px 26px #2639680b;
+  }
   section.active { display: block; }
-  h2 { margin: 0 0 6px; font-size: 17px; }
-  h3 { margin: 22px 0 8px; font-size: 15px; }
-  p.hint { color: var(--muted); margin: 0 0 16px; font-size: 13.5px; }
-  .grid { display: grid; gap: 12px; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); }
-  label { display: block; font-size: 13px; color: var(--muted); margin-bottom: 4px; }
+  h2 { margin: 0 0 6px; font-size: clamp(19px, 3vw, 24px); letter-spacing: -.02em; }
+  h3 { margin: 24px 0 10px; font-size: 16px; }
+  p.hint { max-width: 76ch; margin: 0 0 16px; }
+  .hint { color: var(--muted); font-size: 13px; }
+  .grid { display: grid; gap: 12px; grid-template-columns: repeat(auto-fit, minmax(min(100%, 220px), 1fr)); }
+  label { display: block; font-size: 13px; color: var(--muted); font-weight: 550; margin-bottom: 4px; }
   input, textarea, select {
-    width: 100%; padding: 8px 10px; border: 1px solid var(--line);
-    border-radius: 6px; font: inherit; background: #fff; color: var(--ink);
+    width: 100%; min-width: 0; min-height: 42px; padding: 8px 11px; border: 1px solid #bac6df;
+    border-radius: var(--radius); font: inherit; background: #fff; color: var(--ink);
   }
+  input[type="checkbox"] { min-height: 0; accent-color: var(--primary); }
   textarea { min-height: 90px; resize: vertical; }
-  button.primary {
-    background: var(--ink); color: var(--paper); border: none; padding: 9px 16px;
-    border-radius: 6px; cursor: pointer; font: inherit;
+  button.primary, button.ghost {
+    padding: 8px 13px; border: 1px solid transparent; border-radius: var(--radius); cursor: pointer;
+    font: inherit; font-weight: 600; min-height: 42px;
   }
-  button.primary:disabled { opacity: .5; cursor: default; }
-  button.ghost { background: none; border: 1px solid var(--line); padding: 7px 12px; border-radius: 6px; cursor: pointer; font: inherit; }
-  table { width: 100%; border-collapse: collapse; margin-top: 10px; font-size: 14px; }
-  th, td { text-align: left; padding: 7px 8px; border-bottom: 1px solid var(--line); vertical-align: top; }
-  th { font-size: 12.5px; text-transform: uppercase; letter-spacing: .4px; color: var(--muted); }
-  .pill { display: inline-block; padding: 1px 8px; border-radius: 999px; font-size: 12px; border: 1px solid var(--line); }
-  .pill.ok { color: var(--ok); border-color: var(--ok); }
-  .pill.warn { color: var(--warn); border-color: var(--warn); }
-  .pill.taught { color: var(--accent); border-color: var(--accent); }
-  .msg { margin-top: 12px; padding: 10px 12px; border-radius: 6px; font-size: 14px; display: none; }
+  button.primary { background: var(--primary); color: white; }
+  button.primary:hover:not(:disabled) { background: #1d48b1; }
+  button.ghost { background: #fff; border-color: #bac6df; color: var(--ink); }
+  button.ghost:hover:not(:disabled) { background: var(--blue-soft); }
+  button:disabled { opacity: .55; cursor: default; }
+  :focus-visible { outline: 3px solid #7599f8; outline-offset: 3px; }
+  .scroll-table { overflow-x: auto; margin-top: 14px; border: 1px solid var(--line); border-radius: var(--radius); }
+  table { width: 100%; border-collapse: collapse; font-size: 14px; }
+  th, td { text-align: left; padding: 10px 12px; border-bottom: 1px solid var(--line); vertical-align: top; overflow-wrap: anywhere; }
+  th { font-size: 12px; background: #f4f6fb; color: var(--muted); white-space: nowrap; }
+  tr:last-child td { border-bottom: 0; }
+  td:last-child button { margin: 2px 0; }
+  .pill { display: inline-block; padding: 2px 8px; border-radius: var(--radius); font-size: 12px; color: var(--muted); background: #eef1f8; }
+  .pill.ok { color: var(--ok); background: #eaf5ef; }
+  .pill.warn { color: var(--warn); background: #faf0de; }
+  .pill.taught { color: #483ca3; background: #efedfe; }
+  .msg { margin-top: 12px; padding: 10px 12px; border-radius: var(--radius); font-size: 14px; display: none; overflow-wrap: anywhere; }
   .msg.show { display: block; }
-  .msg.ok { background: #eaf3ec; border: 1px solid var(--ok); }
-  .msg.err { background: #fbeceb; border: 1px solid var(--accent); }
+  .msg.ok { background: var(--blue-soft); }
+  .msg.err { background: #fbeceb; color: var(--accent); }
   .row { display: flex; gap: 8px; flex-wrap: wrap; align-items: flex-end; }
   .row > * { flex: 1 1 160px; }
   .row > button { flex: 0 0 auto; }
-  pre { background: #fbfaf7; border: 1px solid var(--line); padding: 10px; overflow: auto; max-height: 260px; font-size: 12.5px; }
-  .chunk-pick { max-height: 240px; overflow: auto; border: 1px solid var(--line); border-radius: 6px; padding: 8px; }
+  .row input[type="checkbox"] { flex: none; }
+  pre { background: #f4f6fa; border: 1px solid var(--line); padding: 10px; overflow: auto; max-height: 260px; font-size: 12.5px; }
+  .chunk-pick { max-height: 240px; overflow: auto; border: 1px solid var(--line); border-radius: var(--radius); padding: 8px; }
+  .chunk-pick:empty { display: none; }
   .chunk-pick label { display: flex; gap: 8px; align-items: flex-start; color: var(--ink); font-size: 13px; margin-bottom: 6px; }
   .chunk-pick input { width: auto; margin-top: 3px; }
-  .steps ol { margin: 8px 0 0; padding-left: 20px; }
-  .steps li { margin-bottom: 4px; }
+  .steps { background: #f5f7fc; border-radius: var(--radius); padding: 12px 18px; margin: 12px 0 18px; }
+  .steps ol { margin: 0; padding-left: 18px; }
+  .steps li + li { margin-top: 4px; }
+  .empty { color: var(--muted); margin: 16px 0 0; }
+  .key-reveal { margin-top: 16px; padding: 14px; background: var(--blue-soft); border-radius: var(--radius); }
+  #newKeySecret { font-family: ui-monospace, Menlo, monospace; }
+  .traffic { display:flex; align-items:flex-end; gap:5px; height:160px; border-bottom:1px solid var(--line); padding-top:16px; }
+  .trafficBar { flex:1; background:var(--primary); border-radius: var(--radius); min-width:2px; }
+  .trafficBar:hover,.trafficBar:focus { background:#9273ee; }
+  .metricRow { margin:12px 0; display:grid; gap:5px; }
+  .metricRow progress { width:100%; height:10px; accent-color:var(--primary); }
+  nav { position:sticky; top:75px; align-self:start; min-height:calc(100vh - 75px); }
+  .stats.metrics { grid-template-columns: repeat(auto-fit, minmax(min(100%, 130px), 1fr)); }
+  #menuToggle { display: none; }
+  @media (max-width: 830px) {
+    body { grid-template: auto auto 1fr / minmax(0, 1fr); }
+    header { padding: 10px 14px; gap: 10px; flex-wrap: wrap; }
+    #menuToggle { display: inline-block; }
+    nav { position: static; min-height: 0; padding: 10px 14px; }
+    nav:not(.expanded) { display: none; }
+    nav button { min-height: 44px; }
+    main { grid-column: 1; padding: 20px 14px 36px; }
+    section { padding: 16px; margin-top: 16px; overflow-wrap: anywhere; }
+    .stats, .stats.metrics { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
+    .stats div { padding: 10px; }
+    .grid > * { min-width: 0; }
+    input, textarea, select { font-size: 16px; min-height: 44px; }
+    input[type="checkbox"] { min-height: 0; }
+    button.primary, button.ghost { min-height: 44px; max-width: 100%; white-space: normal; }
+    .scroll-table { max-width: 100%; }
+    th, td { padding: 8px; }
+    .traffic { gap: 2px; height: 120px; }
+    pre { white-space: pre-wrap; overflow-wrap: anywhere; }
+  }
+  body.signed-out { display:grid; grid-template: 1fr / minmax(0, 1fr); place-items:center; min-height:100dvh; padding:24px;
+    background:radial-gradient(ellipse at 12% 10%, #dce0fa, transparent 64%),var(--paper); }
+  .login { width:min(100%,390px); padding:clamp(24px,6vw,40px); background:var(--surface);
+    border:1px solid var(--line); border-radius: var(--radius); box-shadow:0 16px 48px #14235a14; }
+  .login h1 { font-size:28px; letter-spacing:-.035em; margin:20px 0; }
+  .login .token { display:grid; gap:10px; }
+  .login .token input { width:100%; }
+  .login p { color:var(--muted); margin:12px 0 0; }
+  .login p:empty { display:none; }
+  header {
+    background: rgba(248, 250, 255, .9);
+    -webkit-backdrop-filter: blur(16px) saturate(145%);
+    backdrop-filter: blur(16px) saturate(145%);
+    box-shadow: 0 4px 18px #14235a0b;
+  }
+  main { background: radial-gradient(ellipse at 92% 0, #d4ddfc, transparent 55%), var(--paper); }
+  .login, main section {
+    background: linear-gradient(145deg, #fffffffa, #f3f5fdea);
+    border-color: #fff;
+    box-shadow: 0 14px 38px #14235a14, inset 0 1px #fff;
+  }
+  .stats div { background: linear-gradient(145deg, #fff, #edf1fc); box-shadow: inset 0 1px #fff; }
+  nav button[aria-current="page"] {
+    background: #ffffff28;
+    border-color: #ffffff50;
+    box-shadow: inset 0 1px #ffffff28;
+  }
+  .is-thinking #diagnosticStatus::before {
+    content: ""; display: inline-block; width: .65em; height: .65em; margin-right: .6em;
+    border-radius: 50%; background: var(--primary); animation: thinking-pulse 1.4s ease-in-out infinite;
+  }
+  @keyframes thinking-pulse { 50% { opacity: .45; transform: scale(.78); } }
+  @media (prefers-reduced-motion: reduce) { .is-thinking #diagnosticStatus::before { animation: none; } }
+  .knowledge-map { display:grid; grid-template-columns:repeat(3,minmax(0,1fr)); gap:16px; margin:16px 0; }
+  .graph-column { min-width:0; display:flex; flex-direction:column; gap:8px; padding:12px; background:#f4f7fd; border-radius:16px; }
+  .graph-column button { text-align:start; color:var(--ink); background:white; border:1px solid var(--line); overflow-wrap:anywhere; }
+  .graph-column button[aria-pressed="true"] { color:white; background:var(--primary); }
+  .graph-column .graph-nodes { display:grid; gap:6px; max-height:340px; overflow:auto; }
+  .knowledge-point { white-space:pre-wrap; overflow-wrap:anywhere; }
+  @media(max-width:680px) { .knowledge-map {grid-template-columns:1fr;} }
 </style>
 </head>
-<body>
-<header>
-  <h1>ДаРэчы — админка</h1>
-  <span class="pill" id="connPill">не подключено</span>
-  <div class="token">
-    <input id="token" type="password" placeholder="ADMIN_TOKEN" style="width:220px" />
-    <button class="ghost" id="saveToken">Запомнить</button>
+<body class="signed-out">
+<svg xmlns="http://www.w3.org/2000/svg" aria-hidden="true" hidden>
+  <symbol id="nav-doc" viewBox="0 0 24 24"><path d="M6 3h9l4 4v14H6zM14 3v5h5M9 12h7m-7 4h7"/></symbol>
+  <symbol id="nav-services" viewBox="0 0 24 24"><path d="M4 7h16v13H4zM8 7V4h8v3M4 12h16m-10 0v3h4v-3"/></symbol>
+  <symbol id="nav-answer" viewBox="0 0 24 24"><path d="M4 4h16v13h-9l-5 4v-4H4zM8 9h8m-8 4h5"/></symbol>
+  <symbol id="nav-catalog" viewBox="0 0 24 24"><path d="M4 6h3m3 0h10M4 12h3m3 0h10M4 18h3m3 0h10"/></symbol>
+  <symbol id="nav-key" viewBox="0 0 24 24"><path d="M14 4a5 5 0 0 0-4.2 7.7L4 17.5V20h3l1.6-1.6v-2.1h2.1l2-2a5 5 0 1 0 1.3-10.3ZM16 8h.01"/></symbol>
+</svg>
+<div class="login" id="loginScreen">
+  <img src="/api/admin/logo.svg" alt="ДаРэчы" width="140" />
+  <h1>Вход в панель</h1>
+    <form class="token" id="tokenForm">
+      <label for="token">Код доступа</label>
+      <input id="token" type="password" autocomplete="current-password" aria-describedby="loginStatus" required />
+      <button class="primary" id="saveToken">Войти</button>
+    </form>
+  <p id="loginStatus" role="status"></p>
+</div>
+<header id="panelHeader" hidden>
+  <div class="brand">
+    <img src="/api/admin/logo.svg" alt="ДаРэчы" width="820" height="320" />
+  </div>
+  <div class="header-actions">
+    <span class="pill" id="connPill" role="status">Вход не выполнен</span>
+
+    <button class="ghost" id="menuToggle" type="button" aria-controls="panelNav" aria-expanded="false">Разделы</button>
+    <button class="ghost" id="logout" type="button" hidden>Выйти</button>
   </div>
 </header>
 
-<nav>
-  <button data-tab="corpus" aria-selected="true">1. База знаний</button>
-  <button data-tab="services" aria-selected="false">2. Услуги</button>
-  <button data-tab="taught" aria-selected="false">3. Доучить модель</button>
-  <button data-tab="catalog" aria-selected="false">4. Каталог из перечня</button>
+<nav id="panelNav" hidden aria-label="Разделы панели">
+  <button data-tab="knowledge">Граф знаний</button>
+  <button data-tab="news">Новости</button>
+  <button data-tab="overview">Обзор и процессы</button>
+  <button data-tab="diagnostics"><svg fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><use href="#nav-answer"/></svg>Проверка ответов</button>
+  <button data-tab="corpus" aria-current="page"><svg fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><use href="#nav-doc"/></svg>База знаний</button>
+  <button data-tab="services"><svg fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><use href="#nav-services"/></svg>Услуги</button>
+  <button data-tab="taught"><svg fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><use href="#nav-answer"/></svg>Готовые ответы</button>
+  <button data-tab="catalog"><svg fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><use href="#nav-catalog"/></svg>Импорт процедур</button>
+  <button data-tab="keys"><svg fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><use href="#nav-key"/></svg>API-ключи</button>
 </nav>
 
-<main>
+<main id="panelMain" tabindex="-1" hidden>
+  <div class="intro">
+    <h1 id="dashboardTitle">Панель управления</h1>
+  </div>
+  <div class="stats" id="dashboardStats" hidden>
+    <div><span>Акты в базе</span><strong id="docsCount">—</strong></div>
+    <div><span>Пункты в индексе</span><strong id="chunksCount">—</strong></div>
+    <div><span>Услуги</span><strong id="servicesCount">—</strong></div>
+  </div>
+
+  <section id="news">
+    <h2>Публикация новости</h2>
+    <form id="newsForm">
+      <label>Заголовок <input name="title" maxlength="180" required></label>
+      <label>Текст <textarea name="body" maxlength="50000" rows="8" required></textarea></label>
+      <label>Теги через запятую <input name="tags" maxlength="300"></label>
+      <label>Фото JPEG или PNG, до 3 МБ <input name="photo" type="file" accept="image/jpeg,image/png"></label>
+      <label>Описание фото <input name="alt" maxlength="250"></label>
+      <button type="submit">Опубликовать</button>
+      <p id="newsStatus" role="status"></p>
+    </form>
+  </section>
+  <section id="overview">
+    <div class="header-actions"><h2>Работа ассистента</h2>
+      <select id="metricsHours" aria-label="Период статистики" style="width:auto">
+        <option value="1">Последний час</option><option value="24" selected>24 часа</option>
+        <option value="168">7 дней</option><option value="720">30 дней</option>
+      </select><button id="refreshMetrics" class="ghost">Обновить</button>
+    </div>
+    <p id="metricsState" class="hint" role="status">Загрузка…</p>
+    <div class="stats metrics">
+      <div><span>Запросы</span><strong id="metricTotal">0</strong></div>
+      <div><span>Медиана</span><strong id="metricMedian">—</strong></div>
+      <div><span>p95</span><strong id="metricP95">—</strong></div>
+      <div><span>Ошибки</span><strong id="metricErrors">0</strong></div>
+    </div>
+    <h3>Запросы по времени</h3>
+    <div id="trafficChart" class="traffic" aria-label="Число запросов по интервалам"></div>
+    <p class="hint">24 равных интервала. Наведите на столбец, чтобы увидеть число запросов и среднее время.</p>
+    <div class="grid">
+      <div><h3>Среднее время этапов</h3><div id="stageChart"></div></div>
+      <div><h3>Режимы ответа</h3><div id="sourceChart"></div></div>
+    </div>
+    <h3>Сейчас выполняются</h3>
+    <p class="hint">Запросы текущего процесса API. Тексты вопросов и ответов в статистику не записываются.</p>
+    <div id="activeProcesses"></div>
+  </section>
+  <section id="diagnostics">
+    <h2>Проверка ответов</h2>
+    <p class="hint">Проверьте вопрос на текущем индексе. Реплика не попадёт в историю диалога.</p>
+    <form id="diagnosticForm">
+      <label for="diagnosticQuestion">Вопрос ассистенту</label>
+      <textarea id="diagnosticQuestion" maxlength="4096" required></textarea>
+      <button type="submit" class="primary" id="diagnosticSubmit">Проверить ответ</button>
+    </form>
+    <p id="diagnosticStatus" class="hint" role="status"></p>
+    <p id="diagnosticAnswer"></p>
+    <ul id="diagnosticSources"></ul>
+  </section>
+
   <!-- 1. КОРПУС -->
-  <section id="corpus" class="active">
+  <section id="knowledge">
+    <h2>Граф знаний</h2>
+    <p class="hint">Выберите акт, затем пункт. Связи с услугами построены по ссылкам в каталоге.</p>
+    <div class="grid">
+      <div><label for="graphAct">Нормативный акт</label><select id="graphAct"></select></div>
+      <div><label for="graphFilter">Поиск по пунктам акта</label><input id="graphFilter" type="search"></div>
+    </div>
+    <div id="knowledgeMap" class="knowledge-map"></div>
+    <p id="graphPoint" class="knowledge-point" aria-live="polite"></p>
+    <button type="button" id="graphImport">Добавить документ</button>
+    <h3>Модель ответа</h3>
+    <p id="modelInfo"></p>
+    <div class="grid">
+      <div><label for="modelChoice">Установленные модели</label><select id="modelChoice"></select></div>
+      <div><button type="button" id="modelApply">Переключить до перезапуска</button></div>
+    </div>
+    <p id="knowledgeStatus" role="status"></p>
+  </section>
+  <section id="corpus">
     <h2>База знаний: добавить акт</h2>
     <p class="hint">
       Загрузите выгрузку акта с pravo.by (текст с заголовками «Статья N.»).
@@ -126,7 +355,10 @@
     <div id="previewOut"></div>
 
     <h3>Что уже в базе</h3>
-    <button class="ghost" id="reloadCorpus">Обновить список</button>
+    <div class="row">
+      <button class="ghost" id="reloadCorpus">Обновить список</button>
+      <button class="ghost" id="reindexCorpus">Перестроить индекс</button>
+    </div>
     <div id="corpusList"></div>
   </section>
 
@@ -276,16 +508,52 @@
     <div id="draftsList"></div>
   </section>
 
+  <section id="keys">
+    <h2>Доступ для внешних сервисов</h2>
+    <p class="hint">Создайте отдельный ключ для каждой интеграции. Передавайте его в заголовке <code>Authorization: Bearer &lt;ключ&gt;</code>.</p>
+    <form class="row" id="keyForm">
+      <div>
+        <label for="keyName">Название интеграции</label>
+        <input id="keyName" maxlength="100" placeholder="Например, Telegram-бот" required />
+      </div>
+      <button class="primary" id="createKey">Создать ключ</button>
+      <button class="ghost" id="reloadKeys" type="button">Обновить список</button>
+    </form>
+    <div class="msg" id="keysMsg" role="status"></div>
+    <div class="key-reveal" id="keyReveal" hidden>
+      <label for="newKeySecret">Скопируйте ключ. После закрытия он больше не будет виден.</label>
+      <div class="row">
+        <input id="newKeySecret" type="text" readonly autocomplete="off" />
+        <button class="ghost" id="copyKey" type="button">Копировать</button>
+        <button class="ghost" id="hideKey" type="button">Закрыть</button>
+      </div>
+    </div>
+    <div id="keysList"></div>
+  </section>
+
 </main>
 
 <script>
 const $ = (id) => document.getElementById(id);
-const state = { token: localStorage.getItem("darechy_admin_token") || "", services: [], pickedSources: [], pickedTaught: [] };
+const state = { token: "", generation: 0, tab: "overview", services: [], pickedSources: [], pickedTaught: [] };
+const escapeHtml = (value) => String(value ?? "").replace(/[&<>"']/g, (char) =>
+  ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[char]);
+const renderTable = (headers, rows) =>
+  `<div class="scroll-table" tabindex="0" role="region" aria-label="Таблица с горизонтальной прокруткой"><table><thead><tr>${headers.map((label) =>
+    `<th scope="col">${label}</th>`).join("")}</tr></thead><tbody>${rows}</tbody></table></div>`;
+
+function handleRows(container, handlers) {
+  $(container).addEventListener("click", (event) => {
+    const button = event.target.closest("button[data-action]");
+    if (button) handlers[button.dataset.action](button.dataset.id);
+  });
+}
 
 /* ---------- связь с API ---------- */
 function setConn(ok, text) {
   const pill = $("connPill");
   pill.textContent = text;
+  $("loginStatus").textContent = text;
   pill.className = "pill " + (ok ? "ok" : "warn");
 }
 
@@ -295,50 +563,281 @@ function msg(el, text, ok = true) {
 }
 
 async function api(path, options = {}) {
+  const generation = state.generation;
   const opts = { ...options, headers: { ...(options.headers || {}), "X-Admin-Token": state.token } };
   const res = await fetch("/api/admin" + path, opts);
   const text = await res.text();
   let body = null;
   try { body = text ? JSON.parse(text) : null; } catch { body = { detail: text }; }
+  if (generation !== state.generation) throw new Error("Сеанс завершён");
   if (!res.ok) {
+    if (res.status === 401 && $("tokenForm").hidden) setSignedOut("Токен администратора больше не действует");
     const reason = body?.detail?.reason || body?.detail || `HTTP ${res.status}`;
-    throw new Error(typeof reason === "string" ? reason : JSON.stringify(reason));
+    throw Object.assign(new Error(typeof reason === "string" ? reason : JSON.stringify(reason)), { status: res.status });
   }
   return body;
 }
 
 /* ---------- вкладки ---------- */
-document.querySelectorAll("nav button").forEach((btn) => {
-  btn.addEventListener("click", () => {
-    document.querySelectorAll("nav button").forEach((b) => b.setAttribute("aria-selected", "false"));
-    document.querySelectorAll("main section").forEach((s) => s.classList.remove("active"));
-    btn.setAttribute("aria-selected", "true");
-    $(btn.dataset.tab).classList.add("active");
+let metricsBusy = false;
+let metricsUnavailable = false;
+async function loadMetrics() {
+  if (metricsBusy || !$("tokenForm").hidden || document.hidden) return;
+  metricsBusy = true;
+  const generation = state.generation;
+  try {
+    const hours = Number($("metricsHours").value);
+    const data = await api("/metrics?hours=" + hours);
+    metricsUnavailable = false;
+    $("metricTotal").textContent = data.total;
+    $("metricMedian").textContent = data.median.toFixed(2) + " с";
+    $("metricP95").textContent = data.p95.toFixed(2) + " с";
+    $("metricErrors").textContent = data.sources.error || 0;
+    const max = Math.max(1, ...data.buckets.map(row => row.count));
+    $("trafficChart").replaceChildren(...data.buckets.map((row, index) => {
+      const bar = document.createElement("div");
+      bar.className = "trafficBar";
+      bar.style.height = Math.max(2, 100 * row.count / max) + "%";
+      bar.tabIndex = 0;
+      const start = new Date(Date.now() - hours * 3600000 + index * hours * 150000);
+      bar.title = start.toLocaleString() + " · " + row.count + " запросов · " +
+        (row.count ? row.seconds / row.count : 0).toFixed(2) + " с";
+      bar.setAttribute("aria-label", bar.title);
+      return bar;
+    }));
+    const labels = { routing: "Маршрутизация", retrieval: "Поиск", generation: "Генерация",
+      conversation: "Диалог", corpus: "Генерация", extractive: "Цитата", checklist: "Чек-лист", taught: "Готовый ответ",
+      refusal: "Отказ", clarify: "Уточнение", error: "Ошибка" };
+    function bars(id, values, seconds) {
+      const limit = Math.max(1, ...Object.values(values));
+      $(id).replaceChildren(...Object.entries(values).map(([name, value]) => {
+        const row = document.createElement("div");
+        row.className = "metricRow";
+        const text = document.createElement("span");
+        text.textContent = (labels[name] || name) + " · " + (seconds ? value.toFixed(2) + " с" : value);
+        const meter = document.createElement("progress");
+        meter.max = limit; meter.value = value;
+        meter.setAttribute("aria-label", text.textContent);
+        row.append(text, meter);
+        return row;
+      }));
+    }
+    bars("stageChart", data.stages, true);
+    bars("sourceChart", data.sources, false);
+    $("activeProcesses").replaceChildren(...data.active.map(row => {
+      const item = document.createElement("p");
+      item.textContent = row.id + " · " + (labels[row.stage] || row.stage) + " · " + row.seconds + " с";
+      return item;
+    }));
+    if (!data.active.length) $("activeProcesses").textContent = "Активных запросов нет";
+    $("metricsState").textContent = data.total
+      ? "Обновлено " + new Date().toLocaleTimeString() + " · автообновление каждые 5 с"
+      : "Пока нет запросов за этот период. Статистика начнёт собираться после перезапуска API.";
+  } catch (error) {
+    if (generation === state.generation) {
+      metricsUnavailable = error.status === 404;
+      $("metricsState").textContent = metricsUnavailable
+        ? "Сервер не отдаёт статистику. Перезапустите API и нажмите «Обновить»."
+        : error.message;
+    }
+  } finally { metricsBusy = false; }
+}
+$("metricsHours").addEventListener("change", loadMetrics);
+$("refreshMetrics").addEventListener("click", loadMetrics);
+setInterval(() => { if (state.tab === "overview" && !metricsUnavailable) void loadMetrics(); }, 5000);
+
+function setMenuOpen(open) {
+  $("panelNav").classList.toggle("expanded", open);
+  $("menuToggle").setAttribute("aria-expanded", String(open));
+}
+$("menuToggle").addEventListener("click", () => {
+  setMenuOpen($("menuToggle").getAttribute("aria-expanded") !== "true");
+});
+
+const tabButtons = [...document.querySelectorAll("nav button")];
+
+$("newsForm").addEventListener("submit", async (event) => {
+  event.preventDefault();
+  const form = event.currentTarget;
+  const button = form.querySelector("button");
+  const {photo, ...draft} = Object.fromEntries(new FormData(form));
+  button.disabled = true;
+  try {
+    if (photo.size > 3000000) throw new Error("Фото должно быть до 3 МБ");
+    if (photo.size) {
+      draft.photo = await new Promise((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onload = () => resolve(reader.result.split(",")[1]);
+        reader.onerror = () => reject(new Error("Не удалось прочитать фото"));
+        reader.readAsDataURL(photo);
+      });
+    }
+    await api("/news", {method: "POST", headers: {"Content-Type": "application/json"}, body: JSON.stringify(draft)});
+    form.reset();
+    $("newsStatus").textContent = "Новость опубликована";
+  } catch (error) {
+    $("newsStatus").textContent = error.message;
+  } finally {
+    button.disabled = false;
+  }
+});
+
+let knowledge = null;
+let selectedPoint = null;
+
+function drawKnowledge() {
+  if (!knowledge) return;
+  const doc = knowledge.documents[Number($("graphAct").value)];
+  const map = $("knowledgeMap");
+  map.replaceChildren();
+  $("graphPoint").textContent = "";
+  if (!doc) return;
+  const query = $("graphFilter").value.trim().toLowerCase();
+  const points = doc.points.filter(point => (point.label + " " + point.text).toLowerCase().includes(query));
+  const point = points.find(item => item.id === selectedPoint);
+  const services = knowledge.services.filter(service =>
+    point ? service.points.includes(point.id) : service.points.some(id => doc.points.some(item => item.id === id)));
+  const column = (title) => {
+    const card = document.createElement("div");
+    card.className = "graph-column";
+    const heading = document.createElement("strong");
+    heading.textContent = title;
+    const nodes = document.createElement("div");
+    nodes.className = "graph-nodes";
+    card.append(heading, nodes);
+    map.append(card);
+    return nodes;
+  };
+  column("Акт →").textContent = doc.title || "Без названия";
+  const nodes = column("Пункты (" + points.length + ") →");
+  for (const item of points) {
+    const button = document.createElement("button");
+    button.type = "button";
+    button.textContent = (item.label || item.id) + " · " + item.status;
+    button.setAttribute("aria-pressed", String(item === point));
+    button.addEventListener("click", () => {
+      const scroll = nodes.scrollTop;
+      selectedPoint = item.id;
+      drawKnowledge();
+      const active = map.querySelector('[aria-pressed="true"]');
+      active?.focus({preventScroll:true});
+      if (active) active.parentElement.scrollTop = scroll;
+    });
+    nodes.append(button);
+  }
+  column("Связанные услуги").textContent = services.map(service => service.title).join(" · ") || "Связей нет";
+  $("graphPoint").textContent = point?.text || "";
+}
+
+async function loadKnowledge() {
+  try {
+    const [graph, models] = await Promise.all([api("/knowledge"), api("/models")]);
+    knowledge = graph;
+    selectedPoint = null;
+    $("graphAct").replaceChildren(...graph.documents.map((doc, index) => new Option(doc.title || doc.number || "Акт", index)));
+    $("modelChoice").replaceChildren(...models.available.filter(name =>
+      name.split(":")[0] !== models.embedding.split(":")[0]).map(name => new Option(name, name)));
+    $("modelChoice").value = models.available.find(name => name === models.active || name === models.active + ":latest") || "";
+    $("modelInfo").textContent = "Активна: " + models.active + " · Поиск: " + models.embedding +
+      (models.dense_ready ? " · Индекс готов" : " · Векторный индекс недоступен");
+    drawKnowledge();
+  } catch (error) { $("knowledgeStatus").textContent = error.message; }
+}
+
+$("graphAct").addEventListener("change", () => { selectedPoint = null; drawKnowledge(); });
+$("graphFilter").addEventListener("input", drawKnowledge);
+$("graphImport").addEventListener("click", () => showTab("corpus"));
+$("modelApply").addEventListener("click", async () => {
+  const button = $("modelApply");
+  button.disabled = true;
+  try {
+    await api("/models?model=" + encodeURIComponent($("modelChoice").value), {method:"POST"});
+    await loadKnowledge();
+    $("knowledgeStatus").textContent = "Модель переключена";
+  } catch (error) { $("knowledgeStatus").textContent = error.message; }
+  finally { button.disabled = false; }
+});
+
+function showTab(tab) {
+  state.tab = tab;
+  for (const button of tabButtons) {
+    const active = button.dataset.tab === tab;
+    if (active) button.setAttribute("aria-current", "page");
+    else button.removeAttribute("aria-current");
+    $(button.dataset.tab).classList.toggle("active", active && $("tokenForm").hidden);
+  }
+  if (tab === "knowledge" && $("tokenForm").hidden) void loadKnowledge();
+  if (tab !== "keys") clearKey();
+  if (tab === "overview" && $("tokenForm").hidden) void loadMetrics();
+}
+
+for (const button of tabButtons) {
+  button.addEventListener("click", () => {
+    showTab(button.dataset.tab);
+    setMenuOpen(false);
+    $("panelMain").focus();
+    if (state.tab === "keys" && $("tokenForm").hidden) void loadKeys();
   });
+}
+
+$("diagnosticForm").addEventListener("submit", async (event) => {
+  event.preventDefault();
+  const question = $("diagnosticQuestion").value.trim();
+  if (!question) return;
+  const generation = state.generation;
+  $("diagnostics").classList.add("is-thinking");
+  $("diagnosticSubmit").disabled = true;
+  $("diagnosticStatus").textContent = "Проверяем…";
+  $("diagnosticAnswer").textContent = "";
+  $("diagnosticSources").replaceChildren();
+  try {
+    const result = await api("/diagnostics/chat", {
+      method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ message: question })
+    });
+    const modes = { conversation: "Диалог", corpus: "Генерация", extractive: "Цитата из корпуса", taught: "Готовый ответ",
+      checklist: "Чек-лист", clarify: "Уточнение", refusal: "Отказ" };
+    $("diagnosticStatus").textContent = `${modes[result.source] || result.source} · ${result.latency_ms} мс`;
+    $("diagnosticAnswer").textContent = result.answer;
+    for (const citation of result.citations) {
+      const item = document.createElement("li");
+      item.textContent = [citation.doc_title, citation.location, citation.quote].filter(Boolean).join(" · ");
+      $("diagnosticSources").append(item);
+    }
+  } catch (error) {
+    if (generation === state.generation) $("diagnosticStatus").textContent = error.message;
+  } finally {
+    $("diagnostics").classList.remove("is-thinking");
+    $("diagnosticSubmit").disabled = false;
+  }
 });
 
 /* ---------- корпус ---------- */
 async function loadCorpus() {
   try {
     const data = await api("/corpus");
-    setConn(true, `подключено · ${data.indexed_chunks} пунктов в индексе`);
+    $("docsCount").textContent = data.docs.length;
+    $("chunksCount").textContent = data.indexed_chunks;
     const rows = data.docs.map((d) => `
       <tr>
-        <td><b>${d.title || d.file}</b><br><span class="hint">${d.file}${d.number ? " · № " + d.number : ""}</span></td>
-        <td>${d.chunks} пунктов<br><span class="hint">${(d.chars / 1000).toFixed(1)} тыс. знаков</span></td>
+        <td><b>${escapeHtml(d.title || d.file)}</b><br><span class="hint">${escapeHtml(d.file)}${d.number ? " · № " + escapeHtml(d.number) : ""}</span></td>
+        <td>${escapeHtml(d.chunks)} пунктов<br><span class="hint">${(d.chars / 1000).toFixed(1)} тыс. знаков</span></td>
         <td>${Object.entries(d.statuses || {}).map(([s, n]) =>
-            `<span class="pill ${s === "проверен" ? "ok" : "warn"}">${s}: ${n}</span>`).join(" ")}</td>
+            `<span class="pill ${s === "проверен" ? "ok" : "warn"}">${escapeHtml(s)}: ${escapeHtml(n)}</span>`).join(" ")}</td>
         <td>
           ${Object.keys(d.statuses || {}).some((s) => s !== "проверен")
-            ? `<button class="ghost" onclick="markVerified('${d.file}')">Отметить проверенным</button>` : "—"}
+            ? `<button class="ghost" data-action="verify" data-id="${escapeHtml(d.file)}">Отметить проверенным</button>` : "—"}
         </td>
       </tr>`).join("");
-    $("corpusList").innerHTML = `<table>
-      <tr><th>Акт</th><th>Объём</th><th>Статусы</th><th>Действие</th></tr>${rows}</table>`;
+    $("corpusList").innerHTML = rows
+      ? renderTable(["Акт", "Объём", "Статусы", "Действие"], rows)
+      : '<p class="empty">В базе пока нет актов.</p>';
   } catch (e) {
-    setConn(false, e.message);
+    msg($("corpusMsg"), e.message, false);
   }
 }
+
+handleRows("corpusList", { verify: markVerified });
 
 async function markVerified(file) {
   if (!confirm("Отметить все пункты акта проверенными?\n\nДелайте это только сверив текст с оригиналом на pravo.by.")) return;
@@ -364,14 +863,14 @@ $("previewBtn").addEventListener("click", async () => {
     else { body = text; headers["Content-Type"] = "text/plain"; }
     const r = await api("/corpus/preview", { method: "POST", body, headers });
     $("corpusPrefix").value = $("corpusPrefix").value || r.suggested_prefix;
-    const rows = r.sample.map((c) => `<tr><td><span class="hint">${c.chunk_id}</span><br>${c.title || ""}</td>
-      <td>${c.chars}</td><td>${c.text.replace(/</g, "&lt;")}…</td></tr>`).join("");
+    const rows = r.sample.map((c) => `<tr><td><span class="hint">${escapeHtml(c.chunk_id)}</span><br>${escapeHtml(c.title)}</td>
+      <td>${escapeHtml(c.chars)}</td><td>${escapeHtml(c.text)}…</td></tr>`).join("");
     $("previewOut").innerHTML = `
-      <div class="msg show ok">Разбор чистый: ${r.integrity}. Пунктов: <b>${r.chunks}</b>,
-      от ${r.size_min} до ${r.size_max} знаков, всего ${(r.chars / 1000).toFixed(1)} тыс.</div>
-      <pre>Реквизиты: ${JSON.stringify(r.doc, null, 2)}</pre>
-      <details><summary>Показать первые пункты</summary><table>
-        <tr><th>Пункт</th><th>Знаков</th><th>Текст</th></tr>${rows}</table></details>`;
+      <div class="msg show ok">Разбор чистый: ${escapeHtml(r.integrity)}. Пунктов: <b>${escapeHtml(r.chunks)}</b>,
+      от ${escapeHtml(r.size_min)} до ${escapeHtml(r.size_max)} знаков, всего ${(r.chars / 1000).toFixed(1)} тыс.</div>
+      <pre>Реквизиты: ${escapeHtml(JSON.stringify(r.doc, null, 2))}</pre>
+      <details><summary>Показать первые пункты</summary>
+        ${renderTable(["Пункт", "Знаков", "Текст"], rows)}</details>`;
     msg($("corpusMsg"), "Разбор проверен — можно сохранять", true);
   } catch (e) { msg($("corpusMsg"), e.message, false); }
 });
@@ -391,22 +890,36 @@ $("importBtn").addEventListener("click", async () => {
   } catch (e) { msg($("corpusMsg"), e.message, false); }
 });
 $("reloadCorpus").addEventListener("click", loadCorpus);
+$("reindexCorpus").addEventListener("click", async () => {
+  const button = $("reindexCorpus");
+  button.disabled = true;
+  msg($("corpusMsg"), "Перестраиваем индекс…");
+  try {
+    const result = await api("/corpus/reindex", { method: "POST" });
+    const errors = (result.errors || []).join("; ");
+    msg($("corpusMsg"), `В индексе ${result.chunks} пунктов, ${result.vectors} векторов.${errors ? " " + errors : ""}`, !errors);
+    await loadCorpus();
+  } catch (e) { msg($("corpusMsg"), e.message, false); }
+  finally { button.disabled = false; }
+});
 
 /* ---------- услуги ---------- */
 async function loadServices() {
   state.services = await api("/services");
+  $("servicesCount").textContent = state.services.length;
   const rows = state.services.map((s) => `
     <tr>
-      <td><b>${s.title}</b><br><span class="hint">${s.id} · ${s.situation_title || s.situation}</span></td>
+      <td><b>${escapeHtml(s.title)}</b><br><span class="hint">${escapeHtml(s.id)} · ${escapeHtml(s.situation_title || s.situation)}</span></td>
       <td>${(s.checklist || []).length} док.</td>
       <td>${(s.sources || []).length} ист.</td>
-      <td><button class="ghost" onclick="editService('${s.id}')">Править</button></td>
+      <td><button class="ghost" data-action="edit" data-id="${escapeHtml(s.id)}">Редактировать</button></td>
     </tr>`).join("");
-  $("servicesList").innerHTML = `<table>
-    <tr><th>Услуга</th><th>Чек-лист</th><th>Источники</th><th></th></tr>${rows}</table>`;
+  $("servicesList").innerHTML = rows
+    ? renderTable(["Услуга", "Документы", "Источники", "Действие"], rows)
+    : '<p class="empty">Услуг пока нет.</p>';
   const sel = $("t_service");
   sel.innerHTML = '<option value="">— любая —</option>' +
-    state.services.map((s) => `<option value="${s.id}">${s.title}</option>`).join("");
+    state.services.map((s) => `<option value="${escapeHtml(s.id)}">${escapeHtml(s.title)}</option>`).join("");
 }
 
 $("createService").addEventListener("click", async () => {
@@ -420,7 +933,8 @@ $("createService").addEventListener("click", async () => {
     editService(r.created.id);
   } catch (e) { msg($("servicesMsg"), e.message, false); }
 });
-$("reloadServices").addEventListener("click", loadServices);
+$("reloadServices").addEventListener("click", () => refresh(loadServices, "servicesMsg"));
+handleRows("servicesList", { edit: editService });
 
 function editService(id) {
   const s = state.services.find((x) => x.id === id);
@@ -433,6 +947,7 @@ function editService(id) {
   $("f_summary").value = s.summary || ""; $("f_who").value = s.who || "";
   $("f_amount").value = s.amount || ""; $("f_deadline").value = s.deadline || "";
   renderChecklist(s.checklist || []);
+  $("chunkPick").replaceChildren();
   renderPicked();
   $("editor").scrollIntoView({ behavior: "smooth" });
 }
@@ -440,64 +955,69 @@ function editService(id) {
 function renderChecklist(items) {
   $("checklistRows").innerHTML = items.map((it, i) => `
     <div class="row" style="margin-bottom:6px">
-      <div><input value="${(it.item || "").replace(/"/g, "&quot;")}" data-cl="item" data-i="${i}" placeholder="Что нужно" /></div>
-      <div><input value="${(it.where || "").replace(/"/g, "&quot;")}" data-cl="where" data-i="${i}" placeholder="Где взять" /></div>
-      <button class="ghost" onclick="removeChecklistRow(${i})">×</button>
+      <div><input value="${escapeHtml(it.item)}" data-cl="item" data-i="${i}" placeholder="Что нужно" /></div>
+      <div><input value="${escapeHtml(it.where)}" data-cl="where" data-i="${i}" placeholder="Где взять" /></div>
+      <button class="ghost" data-action="remove" data-id="${i}" aria-label="Удалить строку">×</button>
     </div>`).join("");
 }
-function collectChecklist() {
+function collectChecklist(keepEmpty = false) {
   const rows = {};
   document.querySelectorAll("#checklistRows input").forEach((inp) => {
     const i = inp.dataset.i;
     rows[i] = rows[i] || { item: "", where: "" };
     rows[i][inp.dataset.cl] = inp.value;
   });
-  return Object.values(rows).filter((r) => r.item.trim());
+  return Object.values(rows).filter((r) => keepEmpty || r.item.trim());
 }
-window.removeChecklistRow = (i) => {
-  const items = collectChecklist();
-  items.splice(i, 1);
+handleRows("checklistRows", { remove: (index) => {
+  const items = collectChecklist(true);
+  items.splice(Number(index), 1);
   renderChecklist(items);
-};
-$("addChecklistRow").addEventListener("click", () => { renderChecklist([...collectChecklist(), { item: "", where: "" }]); });
+} });
+$("addChecklistRow").addEventListener("click", () => { renderChecklist([...collectChecklist(true), { item: "", where: "" }]); });
 
-async function loadChunks(query, pickEl, pickedEl, onPick) {
+async function loadChunks(query, pickEl, key) {
   const chunks = await api(`/chunks?q=${encodeURIComponent(query)}`);
+  const selected = new Set(state[key].map((item) => item.chunk_id));
   pickEl.innerHTML = chunks.length
     ? chunks.map((c) => `
       <label>
-        <input type="checkbox" value="${c.chunk_id}" data-title="${(c.title || "").replace(/"/g, "&quot;")}" onchange="window.__pick(this, '${pickedEl}', ${onPick})" />
-        <span><b>${c.title || c.chunk_id}</b> <span class="hint">${c.doc}</span><br>
-        <span class="hint">${c.preview.replace(/</g, "&lt;")}…</span></span>
+        <input type="checkbox" value="${escapeHtml(c.chunk_id)}" data-title="${escapeHtml(c.title)}" ${selected.has(c.chunk_id) ? "checked" : ""} />
+        <span><b>${escapeHtml(c.title || c.chunk_id)}</b> <span class="hint">${escapeHtml(c.doc)}</span><br>
+        <span class="hint">${escapeHtml(c.preview)}…</span></span>
       </label>`).join("")
-    : '<p class="hint">Ничего не найдено — измените запрос.</p>';
+    : '<p class="hint">Ничего не найдено. Измените запрос.</p>';
 }
 
-window.__pick = (checkbox, pickedId, onPick) => {
-  const list = state[onPick] || [];
-  if (checkbox.checked) {
-    list.push({ chunk_id: checkbox.value, title: checkbox.dataset.title });
-  } else {
-    const idx = list.findIndex((x) => x.chunk_id === checkbox.value);
-    if (idx >= 0) list.splice(idx, 1);
-  }
-  state[onPick] = list;
-  renderPickedFor(pickedId, onPick);
-};
+function bindChunkSearch({ button, query, choices, summary, key, message }) {
+  $(button).addEventListener("click", () => refresh(
+    () => loadChunks($(query).value, $(choices), key), message));
+  $(choices).addEventListener("change", (event) => {
+    const checkbox = event.target;
+    const list = state[key].filter((item) => item.chunk_id !== checkbox.value);
+    if (checkbox.checked) list.push({ chunk_id: checkbox.value, title: checkbox.dataset.title });
+    state[key] = list;
+    renderPickedFor(summary, key);
+  });
+}
 
 function renderPickedFor(elId, key) {
   const list = state[key] || [];
   $(elId).innerHTML = list.length
     ? `<b>Выбрано: ${list.length}</b> ` + list.map((x) =>
-        `<span class="pill ok">${x.title || x.chunk_id}</span>`).join(" ")
+        `<span class="pill ok">${escapeHtml(x.title || x.chunk_id)}</span>`).join(" ")
     : '<span class="hint">Источник не выбран. Без источника услугу/ответ сохранить нельзя.</span>';
 }
 function renderPicked() { renderPickedFor("pickedSources", "pickedSources"); renderPickedFor("t_picked", "pickedTaught"); }
 
-$("searchChunks").addEventListener("click", () =>
-  loadChunks($("chunkSearch").value, $("chunkPick"), "pickedSources", "pickedSources"));
-$("t_searchChunks").addEventListener("click", () =>
-  loadChunks($("t_chunkSearch").value, $("t_chunkPick"), "t_picked", "pickedTaught"));
+bindChunkSearch({
+  button: "searchChunks", query: "chunkSearch", choices: "chunkPick",
+  summary: "pickedSources", key: "pickedSources", message: "servicesMsg"
+});
+bindChunkSearch({
+  button: "t_searchChunks", query: "t_chunkSearch", choices: "t_chunkPick",
+  summary: "t_picked", key: "pickedTaught", message: "taughtMsg"
+});
 
 $("saveService").addEventListener("click", async () => {
   const sources = state.pickedSources.map((x) => ({ title: x.title, point: x.chunk_id, url: null }));
@@ -531,18 +1051,19 @@ async function loadTaught() {
   const broken = data.broken_sources || [];
   const rows = data.items.map((t) => `
     <tr>
-      <td><b>${t.question}</b><br><span class="hint">${t.answer.slice(0, 120)}…</span></td>
-      <td>${t.keywords.map((k) => `<span class="pill taught">${k}</span>`).join(" ")}
-          <br><span class="hint">${t.match_mode === "all" ? "нужны все" : "достаточно одного"}${t.service_id ? " · услуга " + t.service_id : ""}</span></td>
-      <td>${t.sources.map((s) => `<span class="pill ${broken.some((b) => b[0] === t.id && b[1] === s.chunk_id) ? "warn" : "ok"}">${s.chunk_id}</span>`).join(" ")}</td>
+      <td><b>${escapeHtml(t.question)}</b><br><span class="hint">${escapeHtml(t.answer.slice(0, 120))}…</span></td>
+      <td>${t.keywords.map((k) => `<span class="pill taught">${escapeHtml(k)}</span>`).join(" ")}
+          <br><span class="hint">${t.match_mode === "all" ? "нужны все" : "достаточно одного"}${t.service_id ? " · услуга " + escapeHtml(t.service_id) : ""}</span></td>
+      <td>${t.sources.map((s) => `<span class="pill ${broken.some((b) => b[0] === t.id && b[1] === s.chunk_id) ? "warn" : "ok"}">${escapeHtml(s.chunk_id)}</span>`).join(" ")}</td>
       <td>
-        <button class="ghost" onclick="toggleTaught('${t.id}', ${!t.enabled})">${t.enabled ? "Выключить" : "Включить"}</button>
-        <button class="ghost" onclick="deleteTaught('${t.id}')">Удалить</button>
+        <button class="ghost" data-action="${t.enabled ? "disable" : "enable"}" data-id="${escapeHtml(t.id)}">${t.enabled ? "Выключить" : "Включить"}</button>
+        <button class="ghost" data-action="remove" data-id="${escapeHtml(t.id)}">Удалить</button>
       </td>
     </tr>`).join("");
-  $("taughtList").innerHTML = `<table>
-    <tr><th>Вопрос и ответ</th><th>Триггеры</th><th>Источники</th><th></th></tr>${rows}</table>
-    ${broken.length ? `<div class="msg show err">Есть ссылки на пункты, которых больше нет в базе: ${broken.map((b) => b[1]).join(", ")}. Такой ответ не отдаётся.</div>` : ""}`;
+  $("taughtList").innerHTML = (rows
+    ? renderTable(["Вопрос и ответ", "Ключевые слова", "Источники", "Действие"], rows)
+    : '<p class="empty">Готовых ответов пока нет.</p>') +
+    (broken.length ? `<div class="msg show err">Некоторые источники удалены из базы: ${escapeHtml(broken.map((b) => b[1]).join(", "))}. Ответы с этими ссылками отключены.</div>` : "");
 }
 
 $("saveTaught").addEventListener("click", async () => {
@@ -560,50 +1081,53 @@ $("saveTaught").addEventListener("click", async () => {
     await api("/taught", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(payload) });
     msg($("taughtMsg"), "Ответ выучен. Проверьте его в портале — ассистент ответит им сразу.");
     $("t_question").value = ""; $("t_answer").value = ""; $("t_keywords").value = "";
-    state.pickedTaught = []; renderPicked();
-    loadTaught();
+    state.pickedTaught = [];
+    $("t_chunkPick").replaceChildren();
+    renderPicked();
+    await loadTaught();
   } catch (e) { msg($("taughtMsg"), e.message, false); }
 });
-$("reloadTaught").addEventListener("click", loadTaught);
+$("reloadTaught").addEventListener("click", () => refresh(loadTaught, "taughtMsg"));
+handleRows("taughtList", { enable: (id) => toggleTaught(id, true), disable: (id) => toggleTaught(id, false), remove: deleteTaught });
 
-window.toggleTaught = async (id, enabled) => {
-  try { await api(`/taught/${id}`, { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ enabled }) }); loadTaught(); }
+async function toggleTaught(id, enabled) {
+  try { await api(`/taught/${encodeURIComponent(id)}`, { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ enabled }) }); await loadTaught(); }
   catch (e) { msg($("taughtMsg"), e.message, false); }
-};
-window.deleteTaught = async (id) => {
+}
+async function deleteTaught(id) {
   if (!confirm("Удалить выученный ответ?")) return;
-  try { await api(`/taught/${id}`, { method: "DELETE" }); loadTaught(); }
+  try { await api(`/taught/${encodeURIComponent(id)}`, { method: "DELETE" }); await loadTaught(); }
   catch (e) { msg($("taughtMsg"), e.message, false); }
-};
+}
 
 /* ---------- каталог из перечня ---------- */
 async function loadSections() {
   const sections = await api("/sections");
   $("catalogSection").innerHTML = sections.map((s) =>
-    `<option value="${s.name}">${s.name} — ${s.procedures} процедур</option>`).join("");
+    `<option value="${escapeHtml(s.name)}">${escapeHtml(s.name)} — ${escapeHtml(s.procedures)} процедур</option>`).join("");
 }
 
 async function loadDrafts() {
   const data = await api("/services/drafts");
   const st = data.stats;
   $("draftStats").innerHTML = `<div class="msg show ok" style="margin-top:12px">
-    Черновиков: <b>${st.total}</b> · с органом: ${st.with_authority} ·
-    с документами: ${st.with_documents} · заполнено «кто имеет право»: ${st.filled_who}
+    Черновиков: <b>${escapeHtml(st.total)}</b> · с органом: ${escapeHtml(st.with_authority)} ·
+    с документами: ${escapeHtml(st.with_documents)} · заполнено «кто имеет право»: ${escapeHtml(st.filled_who)}
     ${st.total ? `<br><span class="hint">Пока карточка не утверждена, на портале её нет.</span>` : ""}
   </div>`;
   const rows = data.items.map((d) => `
     <tr>
-      <td><b>${d.title}</b><br><span class="hint">${d.id} · ${d.situation}</span></td>
-      <td>${(d.checklist || []).length} док.<br><span class="hint">${(d.deadline || "срок не указан").slice(0, 40)}</span></td>
-      <td><span class="hint">${(d.authority || "орган не указан").slice(0, 70)}</span></td>
+      <td><b>${escapeHtml(d.title)}</b><br><span class="hint">${escapeHtml(d.id)} · ${escapeHtml(d.situation)}</span></td>
+      <td>${(d.checklist || []).length} док.<br><span class="hint">${escapeHtml((d.deadline || "срок не указан").slice(0, 40))}</span></td>
+      <td><span class="hint">${escapeHtml((d.authority || "орган не указан").slice(0, 70))}</span></td>
       <td>
-        <button class="ghost" onclick="approveDraft('${d.id}')">Утвердить</button>
-        <button class="ghost" onclick="rejectDraft('${d.id}')">Отклонить</button>
+        <button class="ghost" data-action="approve" data-id="${escapeHtml(d.id)}">Утвердить</button>
+        <button class="ghost" data-action="reject" data-id="${escapeHtml(d.id)}">Отклонить</button>
       </td>
     </tr>`).join("");
   $("draftsList").innerHTML = data.items.length
-    ? `<table><tr><th>Карточка</th><th>Документы</th><th>Орган</th><th></th></tr>${rows}</table>`
-    : "";
+    ? renderTable(["Карточка", "Документы", "Орган", "Действие"], rows)
+    : '<p class="empty">Черновиков пока нет.</p>';
 }
 
 $("importSection").addEventListener("click", async () => {
@@ -619,44 +1143,190 @@ $("importSection").addEventListener("click", async () => {
     msg($("catalogMsg"),
       `Процедур: ${r.procedures}. ${r.corpus}. Черновики: +${r.drafts.added}, ` +
       `обновлено ${r.drafts.updated}, всего ${r.drafts.total}. Индекс: ${r.reindex.chunks} пунктов.`);
-    loadDrafts();
-  } catch (e) { msg($("catalogMsg"), e.message, false); }
-});
-$("reloadDrafts").addEventListener("click", loadDrafts);
-
-window.approveDraft = async (id) => {
-  try {
-    const r = await api(`/services/drafts/${id}/approve`, { method: "POST" });
-    msg($("catalogMsg"), `Утверждено: «${r.approved.title}» — карточка на портале.`);
-    loadDrafts();
-  } catch (e) { msg($("catalogMsg"), e.message, false); }
-};
-window.rejectDraft = async (id) => {
-  if (!confirm("Отклонить черновик? Карточка будет удалена.")) return;
-  try { await api(`/services/drafts/${id}`, { method: "DELETE" }); loadDrafts(); }
-  catch (e) { msg($("catalogMsg"), e.message, false); }
-};
-
-/* ---------- старт ---------- */
-$("token").value = state.token;
-$("saveToken").addEventListener("click", () => {
-  state.token = $("token").value.trim();
-  localStorage.setItem("darechy_admin_token", state.token);
-  boot();
-});
-
-async function boot() {
-  if (!state.token) { setConn(false, "введите ADMIN_TOKEN"); return; }
-  try {
-    await loadCorpus();
-    await loadServices();
-    await loadTaught();
-    await loadSections();
     await loadDrafts();
-    renderPicked();
-  } catch (e) { setConn(false, e.message); }
+  } catch (e) { msg($("catalogMsg"), e.message, false); }
+});
+$("reloadDrafts").addEventListener("click", () => refresh(loadDrafts, "catalogMsg"));
+handleRows("draftsList", { approve: approveDraft, reject: rejectDraft });
+
+async function approveDraft(id) {
+  try {
+    const r = await api(`/services/drafts/${encodeURIComponent(id)}/approve`, { method: "POST" });
+    msg($("catalogMsg"), `Утверждено: «${r.approved.title}» — карточка на портале.`);
+    await loadDrafts();
+  } catch (e) { msg($("catalogMsg"), e.message, false); }
 }
-boot();
+async function rejectDraft(id) {
+  if (!confirm("Отклонить черновик? Карточка будет удалена.")) return;
+  try { await api(`/services/drafts/${encodeURIComponent(id)}`, { method: "DELETE" }); await loadDrafts(); }
+  catch (e) { msg($("catalogMsg"), e.message, false); }
+}
+
+/* ---------- API-ключи ---------- */
+function clearKey() {
+  $("newKeySecret").value = "";
+  $("keyReveal").hidden = true;
+}
+
+function keyDate(value) {
+  return new Date(value).toLocaleString("ru-RU", { dateStyle: "medium", timeStyle: "short" });
+}
+
+async function loadKeys() {
+  await refresh(async () => {
+    const keys = await api("/api-keys");
+    const rows = keys.map((key) => `
+      <tr>
+        <td><strong>${escapeHtml(key.name)}</strong></td>
+        <td>${escapeHtml(keyDate(key.created_at))}</td>
+        <td>${key.revoked_at ? '<span class="pill warn">Отозван</span>' : '<span class="pill ok">Активен</span>'}</td>
+        <td>${key.revoked_at ? escapeHtml(keyDate(key.revoked_at)) :
+          `<button class="ghost" data-action="revoke" data-id="${escapeHtml(key.id)}">Отозвать</button>`}</td>
+      </tr>`).join("");
+    $("keysList").innerHTML = rows
+      ? renderTable(["Интеграция", "Дата создания", "Статус", "Отзыв"], rows)
+      : '<p class="empty">API-ключей пока нет.</p>';
+  }, "keysMsg");
+}
+
+$("keyForm").addEventListener("submit", async (event) => {
+  event.preventDefault();
+  const name = $("keyName").value.trim();
+  if (!name) return msg($("keysMsg"), "Введите название интеграции", false);
+  if (!$("keyReveal").hidden) return msg($("keysMsg"), "Скопируйте или закройте текущий ключ", false);
+  $("createKey").disabled = true;
+  try {
+    const created = await api("/api-keys", {
+      method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ name })
+    });
+    $("keyName").value = "";
+    if (state.tab === "keys") {
+      $("newKeySecret").value = created.key;
+      $("keyReveal").hidden = false;
+      $("newKeySecret").focus();
+      $("newKeySecret").select();
+    }
+    msg($("keysMsg"), "Ключ создан");
+    await loadKeys();
+  } catch (e) { msg($("keysMsg"), e.message, false); }
+  finally { $("createKey").disabled = false; }
+});
+
+$("copyKey").addEventListener("click", async () => {
+  const input = $("newKeySecret");
+  try {
+    await navigator.clipboard.writeText(input.value);
+    msg($("keysMsg"), "Ключ скопирован");
+  } catch {
+    input.focus();
+    input.select();
+    msg($("keysMsg"), "Скопируйте выделенный ключ вручную", false);
+  }
+});
+$("hideKey").addEventListener("click", () => {
+  clearKey();
+  $("keyName").focus();
+});
+$("reloadKeys").addEventListener("click", loadKeys);
+
+handleRows("keysList", { revoke: async (id) => {
+  if (!confirm("Отозвать ключ? Интеграция потеряет доступ к API.")) return;
+  try {
+    await api(`/api-keys/${encodeURIComponent(id)}`, { method: "DELETE" });
+    msg($("keysMsg"), "Ключ отозван");
+    await loadKeys();
+  } catch (e) { msg($("keysMsg"), e.message, false); }
+} });
+
+/* ---------- сеанс администратора ---------- */
+async function refresh(load, target) {
+  try { await load(); }
+  catch (e) { msg($(target), e.message, false); }
+}
+
+function setSignedOut(message) {
+  setMenuOpen(false);
+  knowledge = null;
+  selectedPoint = null;
+  for (const id of ["graphAct", "modelChoice", "knowledgeMap", "graphPoint", "modelInfo", "knowledgeStatus"]) $(id).replaceChildren();
+  $("graphFilter").value = "";
+  state.generation++;
+  state.token = "";
+  state.services = [];
+  state.pickedSources = [];
+  state.pickedTaught = [];
+  $("tokenForm").hidden = false;
+  $("logout").hidden = true;
+  $("dashboardStats").hidden = true;
+  for (const id of ["trafficChart", "stageChart", "sourceChart", "activeProcesses"]) $(id).replaceChildren();
+  for (const id of ["metricTotal", "metricMedian", "metricP95", "metricErrors"]) $(id).textContent = "—";
+  for (const id of ["diagnosticStatus", "diagnosticAnswer", "diagnosticSources"]) $(id).replaceChildren();
+  $("loginScreen").hidden = false;
+  document.body.classList.toggle("signed-out", true);
+  for (const id of ["panelHeader", "panelNav", "panelMain"]) $(id).hidden = true;
+  $("editor").style.display = "none";
+  clearKey();
+  for (const id of ["corpusList", "servicesList", "taughtList", "draftStats", "draftsList", "keysList",
+    "previewOut", "chunkPick", "t_chunkPick", "checklistRows", "pickedSources", "t_picked", "catalogSection"]) {
+    $(id).replaceChildren();
+  }
+  for (const id of ["docsCount", "chunksCount", "servicesCount"]) $(id).textContent = "—";
+  document.querySelectorAll("main .msg").forEach((element) => {
+    element.className = "msg";
+    element.textContent = "";
+  });
+  document.querySelectorAll('main input:not([type="number"]):not([type="checkbox"]), main textarea').forEach((input) => {
+    input.value = input.defaultValue;
+  });
+  $("t_service").replaceChildren(new Option("— любая —", ""));
+  $("overwrite").checked = false;
+  $("catalogPolish").checked = false;
+  $("catalogLimit").value = $("catalogLimit").defaultValue;
+  setConn(false, message);
+  showTab("overview");
+  $("token").focus();
+}
+
+$("tokenForm").addEventListener("submit", async (event) => {
+  event.preventDefault();
+  const token = $("token").value.trim();
+  if (!token) return;
+  state.generation++;
+  state.token = token;
+  $("saveToken").disabled = true;
+  setConn(false, "Проверяем код…");
+  try {
+    await api("/corpus");
+    $("token").value = "";
+    $("tokenForm").hidden = true;
+    $("logout").hidden = false;
+    $("dashboardStats").hidden = false;
+    $("loginScreen").hidden = true;
+  document.body.classList.toggle("signed-out", false);
+  for (const id of ["panelHeader", "panelNav", "panelMain"]) $(id).hidden = false;
+    setConn(true, "Вход выполнен");
+    showTab(state.tab);
+    $("panelMain").focus();
+    await Promise.all([
+      loadCorpus(),
+      refresh(loadServices, "servicesMsg"),
+      refresh(loadTaught, "taughtMsg"),
+      refresh(loadSections, "catalogMsg"),
+      refresh(loadDrafts, "catalogMsg"),
+      ...(state.tab === "keys" ? [loadKeys()] : [])
+    ]);
+    renderPicked();
+  } catch (e) { setSignedOut(/неверный токен/i.test(e.message) ? "Неверный код доступа" : e.message); }
+  finally { $("saveToken").disabled = false; }
+});
+$("logout").addEventListener("click", () => setSignedOut("Вы вышли из панели"));
+
+try {
+  // Удаляем токен, который сохраняла прежняя версия панели.
+  localStorage.removeItem("darechy_admin_token");
+} catch {
+  // Хранилище может быть недоступно; текущий сеанс работает без него.
+}
 </script>
 </body>
 </html>

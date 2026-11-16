@@ -16,11 +16,10 @@ from typing import TYPE_CHECKING
 from app.chat.router import ServiceRouter
 from app.chat.sessions import SessionMemory
 from app.core.config import Settings
-from app.kb.models import RetrievedChunk
 from app.llm.client import LlmClient
 from app.models.schemas import ChatRequest, ChatResponse, Citation
-from app.retrieval.grouping import article_key
 from app.retrieval.store import ChunkStore, tokenize
+from app.services.telemetry import measured, stage
 
 if TYPE_CHECKING:  # импорт только для аннотаций: taught.py сам импортирует схемы
     from app.chat.taught import TaughtStore
@@ -48,6 +47,47 @@ _DOC_INTENT_TOKENS = {
     "документ", "документы", "справка", "справки", "бумаги", "перечень",
     "заявление", "свидетельство", "копия", "копии",
 }
+_DOCUMENT_REQUIREMENT = re.compile(r"\b(?:нужн\w*|обязательн\w*|потребу\w*)\s+ли\b", re.IGNORECASE)
+_CARE_AT_HOME = re.compile(r"\b(?:декрет\w*|дома|сижу|сидим|сидит)\b", re.IGNORECASE)
+_YOUNG_CHILD = re.compile(r"\b(?:малыш\w*|маленьк\w+\s+реб[её]н\w*|реб[её]н\w*\s+до тр[её]х)\b", re.IGNORECASE)
+_SUPPORT_REQUEST = re.compile(r"\b(?:рассчитыва\w*|помощ\w*|поддерж\w*|выплат\w*|плат\w*|деньг\w*|положен\w*)\b", re.IGNORECASE)
+_BENEFIT = re.compile(r"\b(?:пособи|выплат)\w*\b", re.IGNORECASE)
+_CARE_ELIGIBILITY = re.compile(r"\b(?:кому (?:назнач|положен)\w+|кто (?:имеет|может))\b.*\bпо уходу\b", re.IGNORECASE)
+_DEADLINE_WORDS = re.compile(r"\b(?:срок\w*|когда|до как\w+ дат\w*)\b", re.IGNORECASE)
+_ELAPSED_TIME = re.compile(r"\b(?:недел|месяц|дней|год)\w*\b.{0,30}\bпосле\b|\bпрошл[ои]\b", re.IGNORECASE)
+_TITLE_LABEL = re.compile(r"^(?:статья|пункт|позиция)\s+[\d.-]+\s*|\s*\(повтор \d+\)$", re.IGNORECASE)
+_APPLY_WORDS = re.compile(r"\b(?:обрат\w+|обращ\w+|подат\w+|подач\w+)\b", re.IGNORECASE)
+_APPLICATION_AUTHORITY = re.compile(
+    r"\b(?:где (?:назнач|оформ)\w+|куда (?:идти|обрат\w+)|к кому идти)\b", re.IGNORECASE
+)
+_EARLY_REGISTRATION = re.compile(
+    r"\b(?:ранн\w+|(?:[4-9]|1[01]|восьм\w+|девят\w+)\s+недел\w*)\b.{0,60}\bуч[её]т"
+    r"|\bуч[её]т\w*\b.{0,50}\b(?:рано|ранн\w*|до 12 недель)\b", re.IGNORECASE
+)
+_BIRTH_BENEFIT = re.compile(r"\b(?:единовременн\w*|разов\w*)\b.{0,45}\bрожден\w*", re.IGNORECASE)
+_DISABILITY_BENEFIT_AMOUNT = re.compile(
+    r"\b(?:размер\w*|сколько)\b.{0,70}\b(?:реб[её]н\w*[- ]инвалид\w*|реб[её]н\w*\s+с инвалидност\w*)"
+    r".{0,30}\bдо (?:18|восемнадцати) лет\b", re.IGNORECASE
+)
+_BENEFIT_ACT = "2012_7-Z_zakon-o-gosposobiyakh"
+_OUTSIDE_SCOPE = re.compile(
+    r"^\s*(?:напиши|сочини|придумай)\s+(?:мне\s+)?(?:сти[хш]\w*|песню|анекдот)"
+    r"|\b(?:паспорт\w*|гражданств\w*)\b.{0,40}\bв России\b",
+    re.IGNORECASE,
+)
+
+# Связываем бытовую лексику с формулировками каталога и заголовков актов.
+_SEARCH_PHRASES = tuple(
+    (re.compile(pattern, re.IGNORECASE), phrase)
+    for pattern, phrase in (
+        (r"\bвыписал\w*\s+из роддома\b|\bвыплат\w*\b.{0,35}\bрожден\w*", "единовременное пособие в связи с рождением ребенка"),
+        (r"\bна (?:уч[её]т\w*.{0,35}(?:недел|рано)|(?:[4-9]|1[01]|ранн\w+|восьм\w+|девят\w+)\s+недел\w*.{0,55}уч[её]т)", "пособие женщинам ставшим на учет до 12 недель беременности"),
+        (r"\bобжал\w*|\bоспор\w*\b", "обжалование решений по назначению государственных пособий"),
+        (r"\bпрекраща\w+\s+(?:плат|выплач)\w+", "прекращение выплаты государственных пособий"),
+        (r"\bВИЧ\b", "ребенок инфицированный вирусом иммунодефицита человека"),
+        (r"\bсколько времени\b.{0,55}\bбеременност\w+\b", "период на который назначается пособие по беременности и родам"),
+    )
+)
 
 REFUSAL_TEMPLATE = (
     "Честный ответ: в базе знаний «ДаРэчы» по этому вопросу подтверждённой "
@@ -137,58 +177,37 @@ def _extract_markers(answer: str) -> list[str]:
 
 
 _REFUSAL_MAX_CHARS = 300
-# Минимальное пересечение слов ответа с фрагментом, чтобы считать фрагмент
-# опорой ответа. Ниже порога — опоры нет, и мы не приклеиваем цитату.
-_MIN_SUPPORT_OVERLAP = 1.2
+# Проверка слов и чисел отсеивает неподтверждённые утверждения. Близость
+# слов сама по себе не проверяет смысл, поэтому числа проверяются отдельно.
+_MIN_SUPPORT_SHARE = 0.65
+_NUMBER_RE = re.compile(r"(?<!\w)\d+(?:[.,]\d+)?")
+_CLAIM_RE = re.compile(r"(?<=[.!?;])\s+(?=[А-ЯЁA-Z0-9])|\n+")
 
 
-def best_supporting_chunk(answer: str, hits) -> RetrievedChunk | None:
-    """Фрагмент, на который ответ опирается сильнее всего.
-
-    Зачем: модель часто отвечает верно, но маркер не ставит. Раньше в этом
-    случае цитатой становился первый хит поиска — и под верным ответом стояла
-    не та статья (7 из 8 провалов eval были именно такими). Ответ обычно
-    повторяет слова нормы, поэтому нужный фрагмент находится по пересечению
-    слов, а не по порядку в выдаче.
-    """
-    answer_tokens = set(tokenize(answer))
-    if not answer_tokens:
-        return None
-    best: RetrievedChunk | None = None
-    best_score = 0.0
-    for hit in hits:
-        chunk_tokens = set(tokenize(hit.chunk.text))
-        if not chunk_tokens:
-            continue
-        # Нормируем на длину фрагмента: длинные статьи не должны выигрывать
-        # только за счёт размера.
-        overlap = len(answer_tokens & chunk_tokens) / (len(chunk_tokens) ** 0.5)
-        if overlap > best_score:
-            best_score = overlap
-            best = hit
-    if best is None or best_score < _MIN_SUPPORT_OVERLAP:
-        return None
-    return best
-
-
-def _accepted_markers(answer: str, hits, store: ChunkStore) -> list[str]:
-    """Маркеры ответа, которые подтверждены переданными фрагментами.
-
-    Принимаем либо точное совпадение chunk_id из контекста, либо ссылку на
-    пункт той же статьи, что была в контексте (модель часто указывает пункт
-    точнее, чем найденный фрагмент). Всё остальное — выдумка или ссылка на
-    фрагмент, которого модель не видела.
-    """
-    context_ids = {hit.chunk.chunk_id for hit in hits}
-    context_articles = {article_key(cid) for cid in context_ids}
+def _supporting_ids(answer: str, excerpts: dict[str, str]) -> list[str]:
     accepted: list[str] = []
-    for marker in _extract_markers(answer):
-        if marker in context_ids:
-            if marker not in accepted:
-                accepted.append(marker)
-        elif article_key(marker) in context_articles and store.get(marker):
-            if marker not in accepted:
-                accepted.append(marker)
+    for line in _CLAIM_RE.split(answer):
+        markers = list(dict.fromkeys(_extract_markers(line)))
+        if any(marker not in excerpts for marker in markers):
+            return []
+        claim = _strip_markers(line)
+        claim_tokens = set(tokenize(claim))
+        if not claim_tokens:
+            continue
+        candidates = markers or list(excerpts)
+        numbers = set(_NUMBER_RE.findall(claim))
+        supported = []
+        for chunk_id in candidates:
+            evidence = excerpts[chunk_id]
+            share = len(claim_tokens & set(tokenize(evidence))) / len(claim_tokens)
+            if share >= _MIN_SUPPORT_SHARE and numbers <= set(_NUMBER_RE.findall(evidence)):
+                supported.append(chunk_id)
+        if not supported or (markers and len(supported) != len(markers)):
+            return []
+        # При отсутствии маркера выбираем первый фрагмент с текстовой опорой.
+        for chunk_id in supported if markers else supported[:1]:
+            if chunk_id not in accepted:
+                accepted.append(chunk_id)
     return accepted
 
 
@@ -216,9 +235,6 @@ def _mentions_unknown_article(answer: str, hits) -> str | None:
         match = re.search(r"(\d+(?:-\d+)?)", article)
         if match:
             allowed.add(match.group(1))
-    if not allowed:
-        return None
-
     for match in _ARTICLE_MENTION_RE.finditer(answer):
         if match.group(1) not in allowed:
             return match.group(1)
@@ -313,20 +329,120 @@ class Orchestrator:
         self.router = router
         self.sessions = sessions if sessions is not None else SessionMemory()
 
+    @measured
     def answer(self, request: ChatRequest) -> ChatResponse:
         started = time.perf_counter()
+        message = request.message.casefold()
+        distress = bool(re.search(
+            r"\b(?:умер(?:ла|ли)?|погиб\w*|скончал\w*|сдох\w*|"
+            r"потерял\w*|уволили|развод\w*|страшно|одиноко|"
+            r"тяжело|горе|заболел\w*|насили\w*)\b", message
+        ))
+        personal = bool(re.search(r"\b(?:я|мне|меня|мой|моя|моего|моей|мы|нас|наш\w*)\b", message))
+        needs_support = distress and personal
+        official = request.service_id or re.search(
+            r"\b(?:пособ\w*|выплат\w*|документ\w*|справк\w*|"
+            r"заявлен\w*|закон\w*|стать\w*|оформ\w*|наслед\w*|"
+            r"пенси\w*|компенсац\w*|регистр\w*)\b", message
+        )
+        if needs_support and not official:
+            stage("conversation")
+            history = self.sessions.history(request.session_id)
+            context = "\n".join(
+                f"{turn['role']}: {turn['content'][:1500]}" for turn in history[-4:]
+            )
+            answer = self.llm.chat(
+                "Ты Veda V-4, внимательный русскоязычный помощник. Человек описывает "
+                "трудную личную ситуацию. Начни с короткого уместного сочувствия. "
+                "Ответь конкретно на просьбу в двух коротких предложениях. Не давай непрошеных советов. "
+                "Если не хватает обстоятельств, задай один бережный вопрос. "
+                "Не выдумывай адреса, телефоны, законы или результаты поиска. "
+                "У тебя нет доступа к интернет-поиску. Не утверждай, что что-то нашёл. "
+                "Не назначай лечение. Не отправляй человека в соцзащиту без причины.",
+                f"Предыдущие реплики:\n{context}\nТекущее сообщение:\n{request.message}",
+                max_tokens={"quick": 60, "standard": 100, "deep": 140}[request.effort],
+            )
+            if not answer:
+                answer = "Мне жаль, что вам приходится через это проходить. Какая помощь вам сейчас нужна?"
+            self._remember(request, answer)
+            return self._done(answer, [], started=started, source="conversation")
+        response = self._answer(request)
+        if needs_support:
+            response.answer = "Мне жаль, что вам приходится через это проходить.\n\n" + response.answer
+        return response
+
+    def _answer(self, request: ChatRequest) -> ChatResponse:
+        started = time.perf_counter()
+        message = re.sub(r"[\s!?.,]+", " ", request.message.casefold()).strip()
+        if message in {"привет", "здравствуйте", "добрый день", "добрый вечер", "доброе утро", "прывітанне"}:
+            return self._done("Здравствуйте! Какую госуслугу хотите оформить?", [],
+                              started=started, source="greeting")
+        if message in {"спасибо", "благодарю", "дзякуй"}:
+            return self._done("Пожалуйста!", [], started=started, source="greeting")
+        if message in {"что ты умеешь", "чем можешь помочь", "кто ты", "помощь"}:
+            return self._done("Помогаю разобраться с госуслугами Беларуси: найти нужную услугу, "
+                              "узнать, какие документы собрать и куда обращаться.", [],
+                              started=started, source="greeting")
+        if message in {"как дела", "привет как дела", "как ты", "как жизнь", "что нового"}:
+            return self._done("Всё хорошо, спасибо! А у вас как?", [], started=started, source="greeting")
+        if re.match(r"^(?:(?:можешь|пожалуйста) )?(?:напиши|сделай|создай|сгенерируй|написать) (?:мне )?(?:скрипт|код|программу)\b", message):
+            return self._done("Скрипты и программы я не пишу. Могу помочь разобраться с госуслугами.",
+                              [], refusal=True, started=started)
+        if re.fullmatch(r"(?:я )?(?:хочу |хотим |как )?оформить пособие на реб[её]нка", message):
+            self._remember(request, None)
+            return self._done("Какое пособие хотите оформить — разовое при рождении ребёнка "
+                              "или ежемесячное по уходу? Если не уверены, расскажите, сколько лет ребёнку.",
+                              [], started=started, source="clarify")
+        if _OUTSIDE_SCOPE.search(request.message):
+            return self._done("С этим запросом я не помогу. Могу подсказать по госуслугам Беларуси.", [], refusal=True, started=started)
+        if (
+            re.search(r"\b(?:родил(?:ся|ась)|рождени\w*)\b", message)
+            and re.search(r"\b(?:какие|что)\b", message)
+            and re.search(r"\b(?:пособи|выплат)\w*\b", message)
+            and not (set(tokenize(message)) & _DOC_INTENT_TOKENS)
+            and not re.search(r"\bиз документ\w+\b", message)
+            and not _BIRTH_BENEFIT.search(message)
+            and not request.service_id
+        ):
+            benefits = [
+                ("posobie-rozhdenie", "Разовое пособие при рождении ребёнка", "st-11_п-2"),
+                ("posobie-uhod-do-3-let", "Ежемесячное пособие по уходу до трёх лет", "st-13_п-2"),
+                ("posobie-12-nedel", "Разовое пособие при постановке на учёт до 12 недель беременности", "st-10_п-1"),
+            ]
+            lines, citations, services = [], [], []
+            for service_id, title, point in benefits:
+                sources = _citations_from([f"{_BENEFIT_ACT}_{point}"], self.store)
+                if sources:
+                    lines.append(f"• {title}.")
+                    citations.extend(sources)
+                    services.append(service_id)
+            if lines:
+                answer = "После рождения ребёнка проверьте условия этих выплат:\n\n" + "\n".join(lines)
+                answer += "\n\nМогу подсказать, какие документы нужны и куда подать заявление."
+                self._remember(request, answer)
+                return self._done(answer, citations, suggested=services, started=started, source="extractive")
         history = self.sessions.history(request.session_id)
+        query = request.message
+        if all(pattern.search(query) for pattern in (_CARE_AT_HOME, _YOUNG_CHILD, _SUPPORT_REQUEST)):
+            query += " ежемесячное пособие по уходу за ребенком до 3 лет"
+        if _BENEFIT.search(request.message) and not _APPLICATION_AUTHORITY.search(request.message):
+            query = " ".join([query, *(phrase for pattern, phrase in _SEARCH_PHRASES if pattern.search(request.message))])
 
         # Маршрут считается ПЕРВЫМ: он нужен и слою доучивания (выученный ответ,
         # привязанный к услуге, уместен только если вопрос — об этой услуге),
         # и скоупу поиска.
         route_started = time.perf_counter()
-        routed, routed_by = self._route(request.message)
+        routed, routed_by = self._route(query)
         route_ms = int((time.perf_counter() - route_started) * 1000)
+        if not request.service_id and _SUPPORT_REQUEST.search(message):
+            if _EARLY_REGISTRATION.search(message) and re.search(r"\bбеременн\w*\b", message):
+                routed = ["posobie-12-nedel"]
+            elif re.search(r"\bза перв\w+ реб[её]н\w*\b", message):
+                routed = ["posobie-rozhdenie"]
         suggested = routed
         prefer_ids = (
-            self.router.scope_chunk_ids(routed)
-            if self.router and self.settings.service_scoping
+            self.router.scope_chunk_ids([request.service_id])
+            if self.router and self.settings.service_scoping and request.service_id
             else set()
         )
 
@@ -371,9 +487,24 @@ class Orchestrator:
                 answer, [], suggested=suggested, started=started, source="clarify"
             )
 
+        # Для однозначных вопросов о конкретной норме выводим весь пункт:
+        # сокращение может потерять исключения, условия или часть ставок.
+        if not history and not prefer_ids and (_BENEFIT.search(request.message) or _SUPPORT_REQUEST.search(request.message)):
+            point = self._direct_benefit_point(request.message)
+            hit = self.store.get(f"{_BENEFIT_ACT}_{point}") if point else None
+            if hit is not None:
+                return self._answer_with_quote(request, hit, query, suggested, started, full=True)
+
         # Уточняющие вопросы («а какие документы?») теряют смысл без контекста:
         # в поисковый запрос подмешиваем предыдущую реплику пользователя.
-        query = request.message
+        if _BENEFIT.search(query) and _APPLY_WORDS.search(query) and (
+            _DEADLINE_WORDS.search(query) or _ELAPSED_TIME.search(query)
+        ):
+            query += " сроки обращения за назначением государственных пособий"
+        elif _BENEFIT.search(query) and _APPLICATION_AUTHORITY.search(query):
+            query += " основные положения назначение и выплата государственных пособий"
+        elif _BENEFIT.search(query) and _CARE_ELIGIBILITY.search(query):
+            query += " право на пособие по уходу за ребенком в возрасте до 3 лет"
         if history:
             last_user = next(
                 (turn["content"] for turn in reversed(history) if turn["role"] == "user"),
@@ -382,10 +513,21 @@ class Orchestrator:
             if last_user and request.message.lower().startswith(
                 ("а ", "и ", "а какие", "а что", "а где", "а когда", "а сколько")
             ):
-                query = f"{last_user} {request.message}"
+                query = f"{last_user} {query}"
 
         # Guardrail №1: нет релевантных чанков → отказ. Порог применяется
         # к сырым скорам плеч внутри store.search (RRF-скор — ранговый).
+        stage("retrieval")
+        lexical_evidence = []
+        if not history and not prefer_ids and not self._is_document_requirement(request.message):
+            lexical = self.store.search_bm25(query, top_k=1)
+            if lexical:
+                title_words = set(tokenize(_TITLE_LABEL.sub("", lexical[0].chunk.title or "")))
+                overlap = title_words & set(tokenize(query))
+                if len(overlap) >= 3 and len(overlap) >= 0.67 * len(title_words):
+                    lexical_evidence = lexical
+                if lexical_evidence and len(overlap) == len(title_words):
+                    return self._answer_with_quote(request, lexical_evidence[0], query, suggested, started)
         search_started = time.perf_counter()
         hits = self.store.search(
             query,
@@ -397,13 +539,29 @@ class Orchestrator:
         )
         search_ms = int((time.perf_counter() - search_started) * 1000)
         if not hits:
+            if not routed and not history and not request.service_id and len(message.split()) <= 2:
+                return self._done("Не понял, что вы имеете в виду. Напишите, что хотите оформить "
+                                  "или узнать.", [], started=started, source="clarify")
             self._remember(request, None)
             return self._done(REFUSAL_TEMPLATE, [], refusal=True,
                               suggested=suggested, started=started)
 
+        stage("generation")
         llm_started = time.perf_counter()
-        llm_answer = self.llm.chat(
-            SYSTEM_PROMPT, self._build_context(request, hits, history)
+        excerpts = {hit.chunk.chunk_id: best_excerpt(hit.chunk.text, query) for hit in hits}
+        budget = {"quick": 80, "standard": None, "deep": 320}[request.effort]
+        prompt = SYSTEM_PROMPT
+        if request.effort == "quick":
+            prompt += "\nДай прямой ответ в одном-двух коротких предложениях."
+        elif request.effort == "deep":
+            prompt += ("\nДай краткий вывод, затем объясни, как условия и исключения "
+                       "в приведённых нормах влияют на вывод. На каждый шаг дай ссылку. "
+                       "Покажи только объяснение по источникам, без черновика рассуждений.")
+
+        context = self._build_context(request, hits, excerpts, history)
+        llm_answer = (
+            self.llm.chat(prompt, context, max_tokens=budget)
+            if budget else self.llm.chat(prompt, context)
         )
         llm_ms = int((time.perf_counter() - llm_started) * 1000)
         logger.info(
@@ -411,15 +569,17 @@ class Orchestrator:
             routed or "—", routed_by, route_ms, len(hits), search_ms, llm_ms,
         )
 
-        if llm_answer is None:
+        if not llm_answer or not llm_answer.strip():
+            best = hits[0]
+            keywords = set(tokenize(query))
+            evidence = set(tokenize(f"{best.chunk.title or ''} {best.chunk.text}"))
+            if self._is_document_requirement(request.message) or (
+                best.via == "bm25" and len(keywords) > 2 and len(keywords & evidence) < 2
+            ):
+                self._remember(request, None)
+                return self._done(REFUSAL_TEMPLATE, [], refusal=True, suggested=suggested, started=started)
             # Guardrail №2: LLM недоступна — экстрактивный режим, не выдумываем.
-            answer, citations = self._extractive_answer(hits)
-            self._remember(request, answer)
-            return self._done(
-                answer, citations,
-                suggested=suggested,
-                started=started,
-            )
+            return self._answer_with_quote(request, hits[0], query, suggested, started)
 
         if _looks_like_refusal(llm_answer):
             # Единая политика: короткая реплика с признаком отказа и без
@@ -427,54 +587,27 @@ class Orchestrator:
             # «во фрагментах нет информации» уходил пользователю как обычный
             # ответ с автоматически приклеенной цитатой.
             content = _strip_refusal(llm_answer)
-            has_marker = bool(_accepted_markers(llm_answer, hits, self.store))
+            has_marker = any(marker in excerpts for marker in _extract_markers(llm_answer))
             if not content or (len(content) < _REFUSAL_MAX_CHARS and not has_marker):
+                if lexical_evidence:
+                    return self._answer_with_quote(request, lexical_evidence[0], query, suggested, started)
                 self._remember(request, None)
                 return self._done(REFUSAL_TEMPLATE, [], refusal=True,
                                   suggested=suggested, started=started)
             llm_answer = content
 
-        # Guardrail No3: модель назвала статью, которой нет во фрагментах.
-        # Это признак выдуманной нормы — такой ответ отдавать нельзя.
-        invented = _mentions_unknown_article(llm_answer, hits)
-        if invented is not None:
-            logger.warning(
-                "Модель сослалась на статью %s, которой нет во фрагментах — "
-                "отдаём дословный фрагмент вместо ответа модели",
-                invented,
-            )
-            answer, citations = self._extractive_answer(hits)
-            self._remember(request, answer)
-            return self._done(
-                answer, citations,
-                suggested=suggested,
-                started=started,
-                source="extractive",
-            )
+        marker_ids = (
+            [] if _mentions_unknown_article(llm_answer, hits) else _supporting_ids(llm_answer, excerpts)
+        )
+        citations = _citations_from(marker_ids, self.store)
+        if not citations or len(citations) != len(marker_ids):
+            if lexical_evidence:
+                return self._answer_with_quote(request, lexical_evidence[0], query, suggested, started)
+            self._remember(request, None)
+            return self._done(REFUSAL_TEMPLATE, [], refusal=True,
+                              suggested=suggested, started=started)
 
-        # Ссылки принимаем ТОЛЬКО из фрагментов, которые реально ушли в промпт.
-        # Раньше проверялось существование id во всём корпусе, и модель могла
-        # сослаться на пункт, которого она не видела.
-        marker_ids = _accepted_markers(llm_answer, hits, self.store)
         answer = _strip_markers(llm_answer)
-
-        if marker_ids:
-            citations = _citations_from(marker_ids, self.store)
-        else:
-            # Модель маркер не поставила. Смотрим, на какой из переданных
-            # фрагментов её ответ опирается по тексту: цитата должна
-            # соответствовать ответу, а не порядку в выдаче.
-            support = best_supporting_chunk(answer, hits)
-            if support is None:
-                # Опора не найдена — приклеивать ссылку к тексту модели нельзя.
-                # Отдаём дословный фрагмент акта с честной пометкой.
-                extractive, citations = self._extractive_answer(hits)
-                self._remember(request, extractive)
-                return self._done(
-                    extractive, citations, suggested=suggested,
-                    started=started, source="extractive",
-                )
-            citations = _citations_from([support.chunk.chunk_id], self.store)
         self._remember(request, answer)
         return self._done(
             answer, citations, refusal=False,
@@ -483,11 +616,32 @@ class Orchestrator:
 
     # --- внутреннее ---------------------------------------------------------
 
+    def _direct_benefit_point(self, message: str) -> str | None:
+        if self._is_document_requirement(message):
+            return None
+        if re.search(r"\bвич\b", message, re.IGNORECASE) and re.search(
+            r"\b(?:реб[её]н\w*|дет\w*)\b", message, re.IGNORECASE
+        ):
+            return "st-17_п-1"
+        if re.search(r"\bза перв\w+ реб[её]н\w*\b", message, re.IGNORECASE):
+            return "st-11_п-1"
+        if _DISABILITY_BENEFIT_AMOUNT.search(message):
+            return "st-18_п-5"
+        if _APPLICATION_AUTHORITY.search(message) and _BIRTH_BENEFIT.search(message):
+            return "st-21_п-3"
+        if _EARLY_REGISTRATION.search(message) and _SUPPORT_REQUEST.search(message):
+            return "st-10_п-1"
+        return None
+
     def _documents_answer(self, request: ChatRequest, routed: list[str]) -> ChatResponse | None:
         """Собирает ответ про документы из карточки услуги. None — не наш случай."""
         if not routed or self.router is None or not self.settings.checklist_answers:
             return None
-        if not (set(tokenize(request.message)) & _DOC_INTENT_TOKENS):
+        if not (set(tokenize(request.message)) & _DOC_INTENT_TOKENS) and not re.search(
+            r"\bиз документ\w+\b", request.message, re.IGNORECASE
+        ):
+            return None
+        if self._is_document_requirement(request.message) or _APPLICATION_AUTHORITY.search(request.message):
             return None
 
         services = {service.id: service for service in getattr(self.router, "_services", [])}
@@ -515,6 +669,12 @@ class Orchestrator:
         if not citations:
             return None  # нет подтверждённой нормы — пусть работает обычный путь
         return ChatResponse(answer=answer, citations=citations)
+
+    @staticmethod
+    def _is_document_requirement(message: str) -> bool:
+        return bool(_DOCUMENT_REQUIREMENT.search(message) and re.search(
+            r"\b(?:документ|справк|бумаг|переч|заявлен|свидетельств|копи)\w*", message, re.IGNORECASE
+        ))
 
     def _service_titles(self) -> str:
         """Человеческий список услуг для уточняющего вопроса."""
@@ -590,11 +750,9 @@ class Orchestrator:
 
     def _remember(self, request: ChatRequest, assistant_answer: str | None) -> None:
         """Запоминает реплику пользователя и (если был) ответ ассистента."""
-        self.sessions.append(request.session_id, "user", request.message)
-        if assistant_answer:
-            self.sessions.append(request.session_id, "assistant", assistant_answer)
+        self.sessions.append_exchange(request.session_id, request.message, assistant_answer)
 
-    def _build_context(self, request: ChatRequest, hits, history=None) -> str:
+    def _build_context(self, request: ChatRequest, hits, excerpts, history=None) -> str:
         """Контекст для LLM — только релевантные фрагменты, а не статьи целиком.
 
         Замер на реальном корпусе: шесть статей закона — это ~28 000 символов
@@ -616,7 +774,7 @@ class Orchestrator:
             )
         for hit in hits:
             chunk = hit.chunk
-            excerpt = best_excerpt(chunk.text, request.message)
+            excerpt = excerpts[chunk.chunk_id]
             blocks.append(
                 f"[{chunk.chunk_id}] {chunk.doc_title}"
                 f" ({chunk.doc_number}, {chunk.doc_date})\n{excerpt}"
@@ -630,16 +788,21 @@ class Orchestrator:
             context = f"Контекст страницы услуги: {request.service_id}\n\n{context}"
         return context
 
-    def _extractive_answer(self, hits) -> tuple[str, list[Citation]]:
-        """Fallback без LLM: дословный фрагмент лучшего чанка + цитата."""
-        best = hits[0]
-        snippet = best.chunk.text[:_MAX_QUOTE_CHARS]
+    def _answer_with_quote(self, request, best, query, suggested, started, *, full=False) -> ChatResponse:
+        """Выводит фрагмент из корпуса, когда текст модели не нужен или не подтверждён."""
+        citations = _citations_from([best.chunk.chunk_id], self.store)
+        if not citations:
+            self._remember(request, None)
+            return self._done(REFUSAL_TEMPLATE, [], refusal=True, suggested=suggested, started=started)
+        snippet = best.chunk.text.strip() if full else best_excerpt(
+            best.chunk.text, query, max_chars=_MAX_QUOTE_CHARS
+        )
         answer = (
-            "Модель генерации сейчас недоступна, поэтому дословно из нормативного "
+            "Фрагмент нормативного "
             f"акта ({best.chunk.doc_title}):\n\n{snippet}"
         )
-        citations = _citations_from([best.chunk.chunk_id], self.store)
-        return answer, citations
+        self._remember(request, answer)
+        return self._done(answer, citations, suggested=suggested, started=started, source="extractive")
 
     def _done(
         self,
@@ -655,7 +818,7 @@ class Orchestrator:
             answer=answer,
             citations=citations,
             refusal=refusal,
-            suggested_services=suggested or [],
+            suggested_services=[] if refusal else (suggested or []),
             latency_ms=latency_ms,
             source="refusal" if refusal else source,
         )

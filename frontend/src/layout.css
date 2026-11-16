@@ -61,7 +61,7 @@
   height: 9px;
   border: solid currentColor;
   border-width: 0 2.2px 2.2px 0;
-  border-radius: 1px;
+  border-radius: var(--radius);
 }
 
 .slider-btn:last-child::before {
