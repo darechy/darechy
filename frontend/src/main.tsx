@@ -16,6 +16,7 @@ import "./mobile.css";
 import "./input-fit.css";
 import "./inline-chat.css";
 import "./glass.css";
+import "./veda.css";
 
 createRoot(document.getElementById("root")!).render(
   <StrictMode>
