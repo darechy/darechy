@@ -297,7 +297,6 @@ export default function Assistant({
           <button type="button" onClick={() => switchChat()} disabled={busy || recording || transcribing}>
             <span aria-hidden="true">＋</span> {lang === 'be' ? 'Новы чат' : 'Новый чат'}
           </button>
-          <a href="#/news">{lang === 'be' ? 'Навіны' : 'Новости'}</a>
           <div className="chat-history" aria-label={lang === 'be' ? 'Гісторыя чатаў' : 'История чатов'}>
             {history.map(chat => <button key={chat.id} type="button"
               aria-current={sessionId.current === chat.id ? 'true' : undefined}
