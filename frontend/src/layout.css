@@ -49,6 +49,83 @@
   }
 }
 
+/* Карточка услуги: кликабельна целиком (растянутая ссылка в заголовке), описание прокручивается. */
+.svc {
+  position: relative;
+}
+
+.svc-link {
+  flex: none;
+  color: inherit;
+  text-decoration: none;
+}
+
+.svc-link::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+}
+
+.svc-link:focus-visible {
+  outline: none;
+}
+
+.svc-link:focus-visible::after {
+  outline: 3px solid #233883;
+  outline-offset: 2px;
+}
+
+.svc-body {
+  position: relative;
+  z-index: 1;
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-y: auto;
+  padding-right: 6px;
+  scrollbar-width: thin;
+  scrollbar-color: rgba(37, 99, 235, 0.35) transparent;
+}
+
+.svc-body.has-more {
+  -webkit-mask-image: linear-gradient(to bottom, #000 calc(100% - 28px), transparent);
+  mask-image: linear-gradient(to bottom, #000 calc(100% - 28px), transparent);
+}
+
+.svc-more {
+  position: relative;
+  z-index: 1;
+  flex: none;
+  align-self: flex-start;
+  min-height: 36px;
+  padding: 0 14px;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  background: #ffffff;
+  color: var(--primary);
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+  transition:
+    background-color 0.3s ease,
+    color 0.3s ease;
+}
+
+.svc-more:hover {
+  background: var(--primary);
+  border-color: transparent;
+  color: #ffffff;
+}
+
+.svc dl {
+  flex: none;
+}
+
+/* В слайдере у всех карточек одинаковая высота (вдвое меньше прежней по самой длинной). */
+.slider-track .svc {
+  height: 380px;
+}
+
 /* Кнопки слайдера: обе рисуются одним правилом – зеркальные шевроны. */
 .slider-btn svg {
   display: none;
