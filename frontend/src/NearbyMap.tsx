@@ -3,6 +3,8 @@
    VITE_YANDEX_MAPS_KEY — ключ JavaScript API, рисует карту.
    VITE_YANDEX_SEARCH_KEY — ключ API Поиска по организациям (HTTP API, type=biz). Необязателен.
    Если поиск Яндекса недоступен (нет ключа, 403, сбой сети), учреждения берутся из OpenStreetMap (Overpass API).
+   Логи: в консоли браузера (F12) строки с префиксом [NearbyMap]; строка «ИСТОЧНИК» показывает, чей API сработал.
+   Также источник виден в атрибуте data-source у <section id="nearby">.
    Показываем только государственные учреждения: поиск идёт по фиксированным запросам,
    а найденное дополнительно фильтруется по названию и рубрикам организации. */
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
@@ -39,6 +41,7 @@ const MINSK: Coords = [53.9006, 27.559];
 const MAX_SHOWN = 8;
 const MAX_DIST = 25000;
 const OSM_RADIUS = 10000;
+const LOG = '[NearbyMap]';
 
 let yandexDown = false;
 
@@ -185,6 +188,7 @@ async function searchOsm(c: Coords): Promise<Place[]> {
   });
   if (!res.ok) throw new Error(`OSM HTTP ${res.status}`);
   const data = await res.json();
+  console.info(`${LOG} OpenStreetMap: получено элементов до фильтрации: ${(data.elements ?? []).length}`);
   const out: Place[] = [];
   for (const el of data.elements ?? []) {
     const tags = el.tags ?? {};
@@ -286,12 +290,19 @@ export default function NearbyMap({ lang }: { lang: Lang }) {
     setStatus('searching');
     setErrorText('');
     setActive(null);
+    console.info(`${LOG} поиск учреждений: точка ${origin.coords.join(', ')} (${origin.real ? 'геолокация' : 'центр Минска'})`);
 
     const run = async (): Promise<{ list: Place[]; src: Source }> => {
       let yandexError = '';
-      if (SEARCH_KEY && !yandexDown) {
+      if (!SEARCH_KEY) {
+        console.info(`${LOG} Яндекс поиск пропущен: не задан ключ поиска`);
+      } else if (yandexDown) {
+        console.info(`${LOG} Яндекс поиск пропущен: в этой сессии он уже вернул ошибку (обновите страницу, чтобы попробовать снова)`);
+      } else {
+        console.info(`${LOG} пробуем Яндекс Карты (API Поиска по организациям), запросов: ${CATEGORIES.length}`);
         const results = await Promise.allSettled(CATEGORIES.map((c) => searchCategory(c, origin.coords)));
         const failed = results.filter((r): r is PromiseRejectedResult => r.status === 'rejected');
+        console.info(`${LOG} Яндекс: успешно ${results.length - failed.length} из ${results.length}`);
         if (failed.length < results.length) {
           const merged = new Map<string, Place>();
           results.forEach((r, i) => {
@@ -302,15 +313,18 @@ export default function NearbyMap({ lang }: { lang: Lang }) {
               else merged.set(p.id, { ...p, cats: [CATEGORIES[i].id] });
             });
           });
+          console.info(`${LOG} ИСТОЧНИК: Yandex Maps, найдено объектов: ${merged.size}`);
           return { list: [...merged.values()], src: 'yandex' };
         }
         yandexDown = true;
         const reason = failed[0]?.reason;
         yandexError = `Яндекс: ${reason instanceof Error ? reason.message : String(reason)}`;
-        console.error('[NearbyMap] Yandex search failed, using OpenStreetMap', reason);
+        console.warn(`${LOG} Яндекс поиск не сработал (${yandexError}), переключаемся на OpenStreetMap`);
       }
       try {
-        return { list: await searchOsm(origin.coords), src: 'osm' };
+        const list = await searchOsm(origin.coords);
+        console.info(`${LOG} ИСТОЧНИК: OpenStreetMap (Overpass), после фильтра «госучреждения» осталось объектов: ${list.length}`);
+        return { list, src: 'osm' };
       } catch (e) {
         const own = e instanceof Error ? e.message : String(e);
         throw new Error([yandexError, own].filter(Boolean).join(' | '));
@@ -326,7 +340,7 @@ export default function NearbyMap({ lang }: { lang: Lang }) {
       })
       .catch((e) => {
         if (cancelled) return;
-        console.error('[NearbyMap] search failed', e);
+        console.error(`${LOG} ошибка: ни Яндекс, ни OpenStreetMap не дали список`, e);
         setErrorText(e instanceof Error ? e.message : String(e));
         setStatus('error');
       });
@@ -399,7 +413,13 @@ export default function NearbyMap({ lang }: { lang: Lang }) {
   };
 
   return (
-    <section className='wrap section nearby' id='nearby' ref={sectionRef} aria-labelledby='nearby-title'>
+    <section
+      className='wrap section nearby'
+      id='nearby'
+      ref={sectionRef}
+      aria-labelledby='nearby-title'
+      data-source={status === 'ready' ? source : undefined}
+    >
       <div className='sec-head'>
         <h2 id='nearby-title'>{t.title}</h2>
         <p>{t.sub}</p>
