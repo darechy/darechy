@@ -1,7 +1,8 @@
 /* Блок «Госуслуги рядом» на главной: Яндекс Карты (JS API 2.1) и геолокация.
    Ключи: frontend/.env.local (см. frontend/.env.example).
    VITE_YANDEX_MAPS_KEY — ключ JavaScript API, рисует карту.
-   VITE_YANDEX_SEARCH_KEY — ключ API Поиска по организациям, ищет учреждения (HTTP API, type=biz).
+   VITE_YANDEX_SEARCH_KEY — ключ API Поиска по организациям (HTTP API, type=biz). Необязателен.
+   Если поиск Яндекса недоступен (нет ключа, 403, сбой сети), учреждения берутся из OpenStreetMap (Overpass API).
    Показываем только государственные учреждения: поиск идёт по фиксированным запросам,
    а найденное дополнительно фильтруется по названию и рубрикам организации. */
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
@@ -30,23 +31,32 @@ type Place = {
 };
 type Origin = { coords: Coords; real: boolean };
 type Status = 'idle' | 'locating' | 'searching' | 'ready' | 'error';
+type Source = 'yandex' | 'osm';
 
 const KEY = import.meta.env.VITE_YANDEX_MAPS_KEY as string | undefined;
 const SEARCH_KEY = (import.meta.env.VITE_YANDEX_SEARCH_KEY as string | undefined) || KEY;
 const MINSK: Coords = [53.9006, 27.559];
 const MAX_SHOWN = 8;
 const MAX_DIST = 25000;
+const OSM_RADIUS = 10000;
+
+let yandexDown = false;
 
 const ALL = { id: 'all', ru: 'Все', be: 'Усе' };
 const CATEGORIES: Category[] = [
-  { id: 'zhes', ru: 'ЖЭС', be: 'ЖЭС', query: 'ЖЭС', match: /жэс|жилищн|жрэо|жрэу|эксплуатац/i },
-  { id: 'passport', ru: 'Паспортный стол', be: 'Пашпартны стол', query: 'паспортный стол', match: /паспорт|миграц|гражданств/i },
-  { id: 'military', ru: 'Военкомат', be: 'Ваенкамат', query: 'военкомат', match: /военн|комиссариат|военкомат/i },
-  { id: 'exec', ru: 'Исполком', be: 'Выканкам', query: 'исполком', match: /исполком|исполнительн|администрац/i },
-  { id: 'zags', ru: 'ЗАГС', be: 'ЗАГС', query: 'ЗАГС', match: /загс|регистрации актов/i },
-  { id: 'tax', ru: 'Налоговая', be: 'Падатковая', query: 'налоговая инспекция', match: /налог|инспекц/i },
-  { id: 'social', ru: 'Соцзащита', be: 'Сацзахада', query: 'управление социальной защиты', match: /социальн|занятост|труд|пенсион|фсзн/i },
+  { id: 'zhes', ru: 'ЖЭС', be: 'ЖЭС', query: 'ЖЭС', match: /жэс|жилищн|жрэо|жрэу|эксплуатац|жыллёв|жыллев/i },
+  { id: 'passport', ru: 'Паспортный стол', be: 'Пашпартны стол', query: 'паспортный стол', match: /паспорт|пашпарт|миграц|міграц|гражданств|грамадзянств/i },
+  { id: 'military', ru: 'Военкомат', be: 'Ваенкамат', query: 'военкомат', match: /военн|ваенн|комиссариат|камісарыят|военкомат|ваенкамат/i },
+  { id: 'exec', ru: 'Исполком', be: 'Выканкам', query: 'исполком', match: /исполком|выканкам|исполнительн|выканаўч|администрац|адміністрацы/i },
+  { id: 'zags', ru: 'ЗАГС', be: 'ЗАГС', query: 'ЗАГС', match: /загс|регистрации актов|рэгістрацыі актаў/i },
+  { id: 'tax', ru: 'Налоговая', be: 'Падатковая', query: 'налоговая инспекция', match: /налог|падатк|инспекц|інспекцы/i },
+  { id: 'social', ru: 'Соцзащита', be: 'Сацзахада', query: 'управление социальной защиты', match: /социальн|сацыяльн|занятост|занятасц|труд|працы|пенсион|фсзн/i },
 ];
+
+const GOV_NAME =
+  /жэс|жрэо|жрэу|жыллёв|жыллев|военкомат|ваенкамат|(военн|ваенн)\S*\s+(комиссариат|камісарыят)|исполком|выканкам|(исполнительн|выканаўч)\S*\s+(комитет|камітэт)|загс|паспортн|пашпартн|налогов\S*\s+инспекц|падатков\S*\s+інспекц|(социальн|сацыяльн)\S*\s+(защит|абарон)|занятост|занятасц/i;
+const OSM_NAME =
+  'ЖЭС|ЖРЭО|ЖРЭУ|жилищно|жыллёв|паспортн|пашпартн|военн|ваенн|комиссариат|камісарыят|военкомат|исполком|исполнительн|выканкам|выканаўч|ЗАГС|налогов|падатков|социальн|сацыяльн|занятост|занятасц';
 
 const T = {
   ru: {
@@ -58,12 +68,14 @@ const T = {
     searching: 'Ищем учреждения рядом…',
     denied: 'Геолокация недоступна, показываем окрестности центра Минска.',
     empty: 'Рядом ничего не нашлось. Попробуйте другой тип учреждения.',
-    error: 'Не удалось получить список учреждений. Проверьте ключ поиска по организациям.',
+    error: 'Не удалось получить список учреждений. Попробуйте позже.',
+    osmNote: 'Список собран из открытых данных OpenStreetMap: часть учреждений могла не попасть в неё.',
     nokey: 'Карта подключается ключом Яндекс Карт: добавьте VITE_YANDEX_MAPS_KEY в frontend/.env.local и перезапустите сайт.',
     route: 'Маршрут',
     you: 'Вы здесь',
     mapLabel: 'Карта государственных учреждений',
     credit: 'Данные Яндекс Карт. Часы работы и адрес лучше уточнить перед визитом.',
+    creditOsm: 'Данные © участники OpenStreetMap. Часы работы и адрес лучше уточнить перед визитом.',
   },
   be: {
     title: 'Дзяржаўныя ўстановы побач',
@@ -71,15 +83,17 @@ const T = {
     filter: 'Тып установы',
     locate: 'Абнавіць месцазнаходжанне',
     locating: 'Вызначаем ваша месцазнаходжанне…',
-    searching: 'Шукаем установы побач…',
+    searching: 'Шукаем ўстановы побач…',
     denied: 'Геалакацыя недаступная, паказваем наваколле цэнтра Мінска.',
     empty: 'Побач нічога не знайшлося. Паспрабуйце іншы тып установы.',
-    error: 'Не ўдалося атрымаць спіс устаноў. Праверце ключ пошуку па арганізацыях.',
+    error: 'Не ўдалося атрымаць спіс ўстаноў. Паспрабуйце пазней.',
+    osmNote: 'Спіс зобраны з адкрытых дадзеных OpenStreetMap: частка ўстаноў магла не трапіць у яго.',
     nokey: 'Карта падключаецца ключом Яндэкс Карт: дадайце VITE_YANDEX_MAPS_KEY у frontend/.env.local і перазапусціце сайт.',
     route: 'Маршрут',
     you: 'Вы тут',
-    mapLabel: 'Карта дзяржаўных устаноў',
+    mapLabel: 'Карта дзяржаўных ўстаноў',
     credit: 'Даныя Яндэкс Карт. Гадзіны працы і адрас лепш удакладніць перад візітам.',
+    creditOsm: 'Даныя © удзельнікі OpenStreetMap. Гадзіны працы і адрас лепш удакладніць перад візітам.',
   },
 } as const;
 
@@ -157,6 +171,55 @@ async function searchCategory(cat: Category, c: Coords): Promise<Omit<Place, 'ca
   return out;
 }
 
+async function searchOsm(c: Coords): Promise<Place[]> {
+  const around = `(around:${OSM_RADIUS},${c[0]},${c[1]})`;
+  const query =
+    `[out:json][timeout:25];(` +
+    `nwr["name"~"${OSM_NAME}",i]${around};` +
+    `nwr["name:ru"~"${OSM_NAME}",i]${around};` +
+    `nwr["amenity"~"^(townhall|register_office)$"]${around};` +
+    `);out tags center 250;`;
+  const res = await fetch('https://overpass-api.de/api/interpreter', {
+    method: 'POST',
+    body: new URLSearchParams({ data: query }),
+  });
+  if (!res.ok) throw new Error(`OSM HTTP ${res.status}`);
+  const data = await res.json();
+  const out: Place[] = [];
+  for (const el of data.elements ?? []) {
+    const tags = el.tags ?? {};
+    const name = String(tags['name:ru'] ?? tags.name ?? '');
+    if (!name) continue;
+    if (tags.shop || /^(restaurant|cafe|fast_food|bar|pub|pharmacy|bank|clinic|hospital|school|kindergarten|place_of_worship)$/.test(tags.amenity ?? '')) continue;
+    const text = `${name} ${tags.name ?? ''}`;
+    const govTag =
+      ['government', 'tax', 'administrative', 'military'].includes(tags.office) ||
+      ['townhall', 'register_office', 'public_building'].includes(tags.amenity) ||
+      Boolean(tags.government);
+    if (!govTag && !GOV_NAME.test(text)) continue;
+    const cats = CATEGORIES.filter(
+      (k) => k.match.test(text) || (k.id === 'exec' && tags.amenity === 'townhall') || (k.id === 'zags' && tags.amenity === 'register_office'),
+    ).map((k) => k.id);
+    if (!cats.length) continue;
+    const lat = el.lat ?? el.center?.lat;
+    const lon = el.lon ?? el.center?.lon;
+    if (typeof lat !== 'number' || typeof lon !== 'number') continue;
+    const coords: Coords = [lat, lon];
+    const street = tags['addr:street'] ? `${tags['addr:street']}${tags['addr:housenumber'] ? `, ${tags['addr:housenumber']}` : ''}` : '';
+    out.push({
+      id: `osm-${el.type}-${el.id}`,
+      cats,
+      name,
+      address: [tags['addr:city'], street].filter(Boolean).join(', '),
+      coords,
+      dist: distance(c, coords),
+      hours: tags.opening_hours,
+      phone: tags.phone ?? tags['contact:phone'],
+    });
+  }
+  return out;
+}
+
 export default function NearbyMap({ lang }: { lang: Lang }) {
   const t = T[lang];
   const sectionRef = useRef<HTMLElement | null>(null);
@@ -167,6 +230,7 @@ export default function NearbyMap({ lang }: { lang: Lang }) {
   const [origin, setOrigin] = useState<Origin | null>(null);
   const [denied, setDenied] = useState(false);
   const [status, setStatus] = useState<Status>('idle');
+  const [source, setSource] = useState<Source>('yandex');
   const [errorText, setErrorText] = useState('');
   const [all, setAll] = useState<Place[]>([]);
   const [cat, setCat] = useState('all');
@@ -217,33 +281,55 @@ export default function NearbyMap({ lang }: { lang: Lang }) {
   }, [locate]);
 
   useEffect(() => {
-    if (!KEY || !SEARCH_KEY || !origin) return;
+    if (!KEY || !origin) return;
     let cancelled = false;
     setStatus('searching');
     setErrorText('');
     setActive(null);
-    Promise.allSettled(CATEGORIES.map((c) => searchCategory(c, origin.coords))).then((results) => {
-      if (cancelled) return;
-      const failed = results.filter((r): r is PromiseRejectedResult => r.status === 'rejected');
-      if (failed.length === results.length) {
-        const reason = failed[0].reason;
-        console.error('[NearbyMap] search failed', reason);
-        setErrorText(reason instanceof Error ? reason.message : String(reason));
-        setStatus('error');
-        return;
+
+    const run = async (): Promise<{ list: Place[]; src: Source }> => {
+      let yandexError = '';
+      if (SEARCH_KEY && !yandexDown) {
+        const results = await Promise.allSettled(CATEGORIES.map((c) => searchCategory(c, origin.coords)));
+        const failed = results.filter((r): r is PromiseRejectedResult => r.status === 'rejected');
+        if (failed.length < results.length) {
+          const merged = new Map<string, Place>();
+          results.forEach((r, i) => {
+            if (r.status !== 'fulfilled') return;
+            r.value.forEach((p) => {
+              const prev = merged.get(p.id);
+              if (prev) prev.cats.push(CATEGORIES[i].id);
+              else merged.set(p.id, { ...p, cats: [CATEGORIES[i].id] });
+            });
+          });
+          return { list: [...merged.values()], src: 'yandex' };
+        }
+        yandexDown = true;
+        const reason = failed[0]?.reason;
+        yandexError = `Яндекс: ${reason instanceof Error ? reason.message : String(reason)}`;
+        console.error('[NearbyMap] Yandex search failed, using OpenStreetMap', reason);
       }
-      const merged = new Map<string, Place>();
-      results.forEach((r, i) => {
-        if (r.status !== 'fulfilled') return;
-        r.value.forEach((p) => {
-          const prev = merged.get(p.id);
-          if (prev) prev.cats.push(CATEGORIES[i].id);
-          else merged.set(p.id, { ...p, cats: [CATEGORIES[i].id] });
-        });
+      try {
+        return { list: await searchOsm(origin.coords), src: 'osm' };
+      } catch (e) {
+        const own = e instanceof Error ? e.message : String(e);
+        throw new Error([yandexError, own].filter(Boolean).join(' | '));
+      }
+    };
+
+    run()
+      .then(({ list, src }) => {
+        if (cancelled) return;
+        setAll(list.filter((p) => p.dist <= MAX_DIST).sort((a, b) => a.dist - b.dist));
+        setSource(src);
+        setStatus('ready');
+      })
+      .catch((e) => {
+        if (cancelled) return;
+        console.error('[NearbyMap] search failed', e);
+        setErrorText(e instanceof Error ? e.message : String(e));
+        setStatus('error');
       });
-      setAll([...merged.values()].filter((p) => p.dist <= MAX_DIST).sort((a, b) => a.dist - b.dist));
-      setStatus('ready');
-    });
     return () => {
       cancelled = true;
     };
@@ -345,6 +431,7 @@ export default function NearbyMap({ lang }: { lang: Lang }) {
                 {denied && status !== 'locating' && <p className='nearby-note'>{t.denied}</p>}
                 {status === 'locating' && <p className='nearby-note'>{t.locating}</p>}
                 {status === 'searching' && <p className='nearby-note'>{t.searching}</p>}
+                {status === 'ready' && source === 'osm' && <p className='nearby-note'>{t.osmNote}</p>}
                 {status === 'error' && (
                   <p className='nearby-note is-error'>
                     {t.error}
@@ -393,7 +480,7 @@ export default function NearbyMap({ lang }: { lang: Lang }) {
               </ul>
             </div>
           </div>
-          <p className='nearby-credit muted'>{t.credit}</p>
+          <p className='nearby-credit muted'>{source === 'osm' ? t.creditOsm : t.credit}</p>
         </>
       )}
     </section>
