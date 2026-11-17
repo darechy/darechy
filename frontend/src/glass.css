@@ -413,3 +413,32 @@
     backdrop-filter: none;
   }
 }
+
+/* Header: blur the page behind it and fade the blur out along the bottom edge.
+   The blur lives on a pseudo-element, not on .hdr itself: a backdrop-filter on the
+   parent would turn it into a backdrop root and the child could not see the page. */
+@supports ((backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px))) {
+  .hdr {
+    background: transparent;
+    -webkit-backdrop-filter: none;
+    backdrop-filter: none;
+    box-shadow: none;
+  }
+
+  .hdr::before {
+    content: "";
+    position: absolute;
+    inset: 0 0 -28px;
+    z-index: -1;
+    pointer-events: none;
+    background: rgb(244 249 255 / 38%);
+    -webkit-backdrop-filter: blur(14px) saturate(150%);
+    backdrop-filter: blur(14px) saturate(150%);
+    -webkit-mask-image: linear-gradient(to bottom, #000 calc(100% - 28px), transparent);
+    mask-image: linear-gradient(to bottom, #000 calc(100% - 28px), transparent);
+  }
+
+  .hdr::after {
+    display: none;
+  }
+}
