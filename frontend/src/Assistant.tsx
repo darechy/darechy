@@ -371,9 +371,9 @@ export default function Assistant({
                   <Icon name='speaker' size={kiosk ? 28 : 20} /> {u('a_speak')}
                 </button>}
                 {resp.citations.length > 0 && (
-                  <details className='cites' open={!page && !kiosk}>
+                  <details className='cites'>
                     <summary>
-                      {u('a_why')} ({resp.citations.length})
+                      {lang === 'be' ? 'Паказаць крыніцу' : 'Показать источник'} ({resp.citations.length})
                     </summary>
                     {resp.citations.map((c) => {
                       const meta = [c.doc_number, c.doc_date, c.location].filter(Boolean).join(' · ');

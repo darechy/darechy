@@ -63,7 +63,7 @@ def test_chat_endpoint_contract(client: TestClient) -> None:
 
 
 def test_chat_refusal_contract(client: TestClient) -> None:
-    resp = client.post("/api/chat", json={"message": "как выиграть в лотерею?"})
+    resp = client.post("/api/chat", json={"message": "Какой закон регулирует добычу полезных ископаемых на Марсе?"})
     body = resp.json()
     assert body["refusal"] is True
     assert body["answer"] == REFUSAL_TEMPLATE

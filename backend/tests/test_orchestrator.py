@@ -37,7 +37,7 @@ def test_answer_with_citations(env) -> None:
 def test_refusal_when_no_relevant_chunks(env) -> None:
     settings, store = env
     orch = Orchestrator(settings, store, FakeLlm())
-    response = orch.answer(ChatRequest(message="как выиграть в лотерею?"))
+    response = orch.answer(ChatRequest(message="Какой закон регулирует добычу полезных ископаемых на Марсе?"))
     assert response.refusal
     assert response.answer == REFUSAL_TEMPLATE
     assert response.citations == []
@@ -82,7 +82,7 @@ def test_extractive_fallback_when_llm_down(env) -> None:
     orch = Orchestrator(settings, store, FakeLlm())  # chat_script пуст → None
     response = orch.answer(ChatRequest(message="размер пособия базовая величина"))
     assert not response.refusal
-    assert "Фрагмент нормативного акта" in response.answer
+    assert "Размер пособия определяется базовой величиной" in response.answer
     assert len(response.citations) == 1
 
 

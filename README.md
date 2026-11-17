@@ -65,7 +65,7 @@ darechy/
 | Docker Desktop | Postgres, Redis, Qdrant | `brew install --cask docker` |
 | Python ≥ 3.11 | бэкенд | уже есть на macOS |
 | Node ≥ 20 | фронтенд | уже есть / `brew install node` |
-| Ollama | локальная LLM | `brew install ollama && ollama pull bge-m3 && ollama pull qwen3:1.7b` — почему именно эти, см. [локальная-модель.md](docs/локальная-модель.md) |
+| Ollama | локальная LLM | `brew install ollama && ollama pull bge-m3 && ollama pull qwen3:4b-instruct-2507-q4_K_M` — почему именно эти, см. [локальная-модель.md](docs/локальная-модель.md) |
 
 ### 1. Инфраструктура
 
@@ -172,3 +172,12 @@ python -m app.bot.telegram
 ## Лицензия
 
 MIT — см. [LICENSE](LICENSE).
+
+### Запуск для локальной проверки
+
+После установки зависимостей и запуска Ollama запустите из корня проекта
+`bash scripts/dev.sh`. Чат откроется на `http://127.0.0.1:5174/#/chat`,
+админка — на `http://127.0.0.1:8013/api/admin`. Порты можно задать через
+`DARECHY_WEB_PORT` и `DARECHY_API_PORT`. Для векторного поиска запустите Qdrant
+как описано выше. Модели для текущего конфига — `qwen3:4b-instruct-2507-q4_K_M`
+и `bge-m3`.

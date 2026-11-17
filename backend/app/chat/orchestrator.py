@@ -120,7 +120,9 @@ SYSTEM_PROMPT = (
     "(4) если во фрагментах нет прямого ответа на вопрос — ответь ровно одним "
     "словом ОТКАЗ и больше ничем. Не отвечай на смежную тему, не перечисляй "
     "другие пособия, не заполняй пробел догадкой: «похоже по теме» — это не ответ;\n"
-    "(5) пиши кратко и по-человечески, без канцелярита."
+    " (5) начни с прямого ответа простыми словами. Если вопрос общий или "
+    "ответ зависит от ситуации, задай один конкретный уточняющий вопрос. "
+    "Не переписывай весь фрагмент акта. Дословно цитируй только по просьбе."
 )
 
 # Модель может «отказаться» своими словами, не написав ровно ОТКАЗ. Раньше
@@ -343,33 +345,56 @@ class Orchestrator:
         official = request.service_id or re.search(
             r"\b(?:пособ\w*|выплат\w*|документ\w*|справк\w*|"
             r"заявлен\w*|закон\w*|стать\w*|оформ\w*|наслед\w*|"
-            r"пенси\w*|компенсац\w*|регистр\w*)\b", message
+            r"пенси\w*|компенсац\w*|регистр\w*|курс доллара|курс евро)\b", message
         )
-        if needs_support and not official:
-            stage("conversation")
-            history = self.sessions.history(request.session_id)
-            context = "\n".join(
-                f"{turn['role']}: {turn['content'][:1500]}" for turn in history[-4:]
-            )
-            answer = self.llm.chat(
-                "Ты Veda V-4, внимательный русскоязычный помощник. Человек описывает "
-                "трудную личную ситуацию. Начни с короткого уместного сочувствия. "
-                "Ответь конкретно на просьбу в двух коротких предложениях. Не давай непрошеных советов. "
-                "Если не хватает обстоятельств, задай один бережный вопрос. "
-                "Не выдумывай адреса, телефоны, законы или результаты поиска. "
-                "У тебя нет доступа к интернет-поиску. Не утверждай, что что-то нашёл. "
-                "Не назначай лечение. Не отправляй человека в соцзащиту без причины.",
-                f"Предыдущие реплики:\n{context}\nТекущее сообщение:\n{request.message}",
-                max_tokens={"quick": 60, "standard": 100, "deep": 140}[request.effort],
-            )
-            if not answer:
-                answer = "Мне жаль, что вам приходится через это проходить. Какая помощь вам сейчас нужна?"
-            self._remember(request, answer)
-            return self._done(answer, [], started=started, source="conversation")
+        casual = re.match(
+            r"^(?:давай (?:поболтаем|поговорим)|расскажи (?:шутку|анекдот)|"
+            r"(?:напиши|сочини|придумай) (?:мне )?(?:стих\w*|песню|анекдот|короткое имя|кличку))\b",
+            message.strip(),
+        )
+        if casual or (needs_support and not official):
+            return self._conversation(request, started, needs_support)
         response = self._answer(request)
+        if response.refusal and not official and not _OUTSIDE_SCOPE.search(message):
+            recent = self.sessions.history(request.session_id)
+            # An earlier grounded answer can make a brief follow-up domain-specific.
+            if not any(turn["role"] == "assistant" for turn in recent):
+                return self._conversation(request, started)
         if needs_support:
             response.answer = "Мне жаль, что вам приходится через это проходить.\n\n" + response.answer
         return response
+
+    def _conversation(self, request: ChatRequest, started: float, supportive: bool = False) -> ChatResponse:
+        stage("conversation")
+        history = self.sessions.history(request.session_id)
+        context = "\n".join(
+            f"{turn['role']}: {turn['content'][:1000]}" for turn in history[-4:]
+        )
+        prompt = (
+            "Ты Veda V-4. Отвечай естественно на языке собеседника. "
+            "Если человек просит поговорить, поддержи разговор. Если просьба понятна, "
+            "помоги сразу. Если нет — задай один короткий вопрос. "
+            "Не выдумывай законы, контакты и результаты поиска. "
+            "В вопросах о правах, выплатах, лечении или деньгах не давай конкретных "
+            "рекомендаций без проверенных данных."
+        )
+        if request.effort == "quick":
+            prompt += " Ответь максимум двумя короткими предложениями."
+        if supportive:
+            prompt += " Начни с короткого сочувствия и не давай непрошеных советов."
+        answer = self.llm.chat(
+            prompt,
+            f"Предыдущие реплики:\n{context}\nТекущее сообщение:\n{request.message}",
+            max_tokens={"quick": 80, "standard": 150, "deep": 220}[request.effort],
+        )
+        if not answer:
+            answer = (
+                "Мне жаль, что вам сейчас тяжело. Что помогло бы вам в этот момент?"
+                if supportive else
+                "Сейчас не получилось сформулировать ответ. Можете уточнить, что для вас главное?"
+            )
+        self._remember(request, answer)
+        return self._done(answer, [], started=started, source="conversation")
 
     def _answer(self, request: ChatRequest) -> ChatResponse:
         started = time.perf_counter()
@@ -553,6 +578,8 @@ class Orchestrator:
         prompt = SYSTEM_PROMPT
         if request.effort == "quick":
             prompt += "\nДай прямой ответ в одном-двух коротких предложениях."
+        elif request.effort == "standard":
+            prompt += "\nОбъясни главное простыми словами и подскажи ближайший шаг."
         elif request.effort == "deep":
             prompt += ("\nДай краткий вывод, затем объясни, как условия и исключения "
                        "в приведённых нормах влияют на вывод. На каждый шаг дай ссылку. "
@@ -794,13 +821,45 @@ class Orchestrator:
         if not citations:
             self._remember(request, None)
             return self._done(REFUSAL_TEMPLATE, [], refusal=True, suggested=suggested, started=started)
-        snippet = best.chunk.text.strip() if full else best_excerpt(
-            best.chunk.text, query, max_chars=_MAX_QUOTE_CHARS
+        asks_for_quote = re.search(
+            r"\b(?:процитируй|цитат\w*|покажи (?:норму|источник|статью)|дословно)\b",
+            request.message, re.IGNORECASE,
         )
-        answer = (
-            "Фрагмент нормативного "
-            f"акта ({best.chunk.doc_title}):\n\n{snippet}"
-        )
+        text = best.chunk.text.strip()
+        if not asks_for_quote and len(text) > _MAX_QUOTE_CHARS:
+            service = next((
+                service for service in getattr(self.router, "_services", [])
+                if any(source.point == best.chunk.chunk_id for source in service.sources)
+                and service.status != "черновик"
+            ), None)
+            if service:
+                question = (
+                    "Ребёнок родился в Беларуси или за границей? От этого зависит список документов."
+                    if service.id == "posobie-rozhdenie" else
+                    "Что хотите уточнить в первую очередь: документы, куда обращаться или сроки?"
+                )
+                parts = [service.summary]
+                if request.effort != "quick" and service.authority:
+                    parts.append(f"Куда обращаться: {service.authority}")
+                if request.effort == "deep":
+                    if service.deadline:
+                        parts.append(f"Срок: {service.deadline}")
+                    if service.cost:
+                        parts.append(f"Стоимость: {service.cost}")
+                parts.append(question)
+                answer = "\n\n".join(parts)
+                suggested = [service.id]
+            else:
+                title = best.chunk.title or best.chunk.doc_title
+                answer = (
+                    f"Нашёл норму по теме «{title}». "
+                    "Что именно хотите уточнить: условия, порядок оформления или сроки?"
+                )
+        else:
+            snippet = text if full and asks_for_quote else best_excerpt(
+                text, query, max_chars=_MAX_QUOTE_CHARS
+            )
+            answer = snippet
         self._remember(request, answer)
         return self._done(answer, citations, suggested=suggested, started=started, source="extractive")
 
