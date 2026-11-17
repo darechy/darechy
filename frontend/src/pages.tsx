@@ -62,19 +62,21 @@ export function useSituationCards() {
   ];
 }
 
-// Карточка услуги: высота задаётся в CSS, описание, которое не влезает, прокручивается внутри.
+// Карточка услуги: высота задаётся в CSS, описание, которое не влезает, прокручивается внутри
+// (колесом, пальцем, клавиатурой или стрелками вверх/вниз в правом нижнем углу).
 // Вся карточка остаётся кликабельной через растянутую ссылку в заголовке (кнопку внутри <a> нельзя).
 function ServiceCard({ service }: { service: Service }) {
   const { t, lang } = useT();
   const bodyRef = useRef<HTMLDivElement | null>(null);
-  const [scroll, setScroll] = useState({ can: false, end: true });
+  const [scroll, setScroll] = useState({ can: false, start: true, end: true });
 
   const measure = useCallback(() => {
     const el = bodyRef.current;
     if (!el) return;
     const can = el.scrollHeight - el.clientHeight > 2;
+    const start = el.scrollTop <= 2;
     const end = el.scrollTop + el.clientHeight >= el.scrollHeight - 2;
-    setScroll((prev) => (prev.can === can && prev.end === end ? prev : { can, end }));
+    setScroll((prev) => (prev.can === can && prev.start === start && prev.end === end ? prev : { can, start, end }));
   }, []);
 
   useEffect(() => {
@@ -87,13 +89,11 @@ function ServiceCard({ service }: { service: Service }) {
     return () => ro.disconnect();
   }, [measure, service.summary]);
 
-  const label = lang === 'be' ? { more: 'Яшчэ', top: 'Да пачатку' } : { more: 'Ещё', top: 'К началу' };
+  const labels = lang === 'be' ? { up: 'Прагарнуць ўверх', down: 'Прагарнуць ўніз' } : { up: 'Прокрутить вверх', down: 'Прокрутить вниз' };
 
-  const flip = () => {
+  const step = (dir: 1 | -1) => {
     const el = bodyRef.current;
-    if (!el) return;
-    if (scroll.end) el.scrollTo({ top: 0, behavior: 'smooth' });
-    else el.scrollBy({ top: Math.max(60, el.clientHeight * 0.8), behavior: 'smooth' });
+    if (el) el.scrollBy({ top: dir * Math.max(60, el.clientHeight * 0.8), behavior: 'smooth' });
   };
 
   return (
@@ -104,21 +104,24 @@ function ServiceCard({ service }: { service: Service }) {
       <div className={`svc-body${scroll.can && !scroll.end ? ' has-more' : ''}`} ref={bodyRef} onScroll={measure} tabIndex={scroll.can ? 0 : undefined}>
         <p>{service.summary}</p>
       </div>
-      {scroll.can && (
-        <button className='svc-more' type='button' onClick={flip}>
-          {scroll.end ? `↑ ${label.top}` : `${label.more} ↓`}
-        </button>
-      )}
-      <dl>
-        <div>
-          <dt>{t('amount')}</dt>
-          <dd>{clean(service.amount)}</dd>
-        </div>
-        <div>
-          <dt>{t('deadline')}</dt>
-          <dd>{clean(service.deadline)}</dd>
-        </div>
-      </dl>
+      <div className='svc-foot'>
+        <dl>
+          <div>
+            <dt>{t('amount')}</dt>
+            <dd>{clean(service.amount)}</dd>
+          </div>
+          <div>
+            <dt>{t('deadline')}</dt>
+            <dd>{clean(service.deadline)}</dd>
+          </div>
+        </dl>
+        {scroll.can && (
+          <div className='svc-arrows'>
+            <button className='svc-arrow svc-arrow-up' type='button' onClick={() => step(-1)} disabled={scroll.start} aria-label={labels.up} />
+            <button className='svc-arrow svc-arrow-down' type='button' onClick={() => step(1)} disabled={scroll.end} aria-label={labels.down} />
+          </div>
+        )}
+      </div>
     </article>
   );
 }

@@ -92,38 +92,81 @@
   mask-image: linear-gradient(to bottom, #000 calc(100% - 28px), transparent);
 }
 
-.svc-more {
+/* Низ карточки: «Размер / Срок» слева, стрелки прокрутки текста справа (только если текст не влезает). */
+.svc-foot {
+  display: flex;
+  flex: none;
+  align-items: flex-end;
+  gap: 12px;
+  margin-top: 8px;
+  padding-top: 8px;
+  border-top: 1px solid var(--line);
+}
+
+.svc-foot dl {
+  flex: 1;
+  min-width: 0;
+  margin: 0;
+  padding: 0;
+  border-top: 0;
+}
+
+.svc-arrows {
   position: relative;
   z-index: 1;
+  display: flex;
   flex: none;
-  align-self: flex-start;
-  min-height: 36px;
-  padding: 0 14px;
-  border: 1px solid var(--line);
-  border-radius: 999px;
+  gap: 6px;
+}
+
+.svc-arrow {
+  display: grid;
+  place-items: center;
+  width: 34px;
+  height: 34px;
+  padding: 0;
   background: #ffffff;
+  border: 1px solid var(--line);
+  border-radius: 50%;
   color: var(--primary);
-  font-size: 14px;
-  font-weight: 600;
   cursor: pointer;
   transition:
     background-color 0.3s ease,
-    color 0.3s ease;
+    color 0.3s ease,
+    opacity 0.3s ease;
 }
 
-.svc-more:hover {
+.svc-arrow::before {
+  content: '';
+  display: block;
+  width: 8px;
+  height: 8px;
+  border: solid currentColor;
+  border-width: 0 2px 2px 0;
+}
+
+.svc-arrow-down::before {
+  transform: translateY(-2px) rotate(45deg);
+}
+
+.svc-arrow-up::before {
+  transform: translateY(2px) rotate(-135deg);
+}
+
+.svc-arrow:hover:not(:disabled) {
   background: var(--primary);
   border-color: transparent;
   color: #ffffff;
 }
 
-.svc dl {
-  flex: none;
+.svc-arrow:disabled {
+  opacity: 0.35;
+  cursor: default;
 }
 
-/* В слайдере у всех карточек одинаковая высота (вдвое меньше прежней по самой длинной). */
+/* В слайдере у всех карточек одинаковая высота. */
 .slider-track .svc {
-  height: 380px;
+  height: 480px;
 }
 
 /* Кнопки слайдера: обе рисуются одним правилом – зеркальные шевроны. */
