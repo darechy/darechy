@@ -1,5 +1,7 @@
 /* Блок «Госуслуги рядом» на главной: Яндекс Карты (JS API 2.1) и геолокация.
-   Нужен ключ: frontend/.env.local, VITE_YANDEX_MAPS_KEY=... (см. frontend/.env.example).
+   Ключи: frontend/.env.local (см. frontend/.env.example).
+   VITE_YANDEX_MAPS_KEY — ключ JavaScript API, рисует карту.
+   VITE_YANDEX_SEARCH_KEY — ключ API Поиска по организациям, ищет учреждения (HTTP API, type=biz).
    Показываем только государственные учреждения: поиск идёт по фиксированным запросам,
    а найденное дополнительно фильтруется по названию и рубрикам организации. */
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
@@ -30,6 +32,7 @@ type Origin = { coords: Coords; real: boolean };
 type Status = 'idle' | 'locating' | 'searching' | 'ready' | 'error';
 
 const KEY = import.meta.env.VITE_YANDEX_MAPS_KEY as string | undefined;
+const SEARCH_KEY = (import.meta.env.VITE_YANDEX_SEARCH_KEY as string | undefined) || KEY;
 const MINSK: Coords = [53.9006, 27.559];
 const MAX_SHOWN = 8;
 const MAX_DIST = 25000;
@@ -55,7 +58,7 @@ const T = {
     searching: 'Ищем учреждения рядом…',
     denied: 'Геолокация недоступна, показываем окрестности центра Минска.',
     empty: 'Рядом ничего не нашлось. Попробуйте другой тип учреждения.',
-    error: 'Не удалось загрузить карту. Проверьте ключ и соединение.',
+    error: 'Не удалось получить список учреждений. Проверьте ключ поиска по организациям.',
     nokey: 'Карта подключается ключом Яндекс Карт: добавьте VITE_YANDEX_MAPS_KEY в frontend/.env.local и перезапустите сайт.',
     route: 'Маршрут',
     you: 'Вы здесь',
@@ -71,7 +74,7 @@ const T = {
     searching: 'Шукаем установы побач…',
     denied: 'Геалакацыя недаступная, паказваем наваколле цэнтра Мінска.',
     empty: 'Побач нічога не знайшлося. Паспрабуйце іншы тып установы.',
-    error: 'Не ўдалося загрузіць карту. Праверце ключ і злучэнне.',
+    error: 'Не ўдалося атрымаць спіс устаноў. Праверце ключ пошуку па арганізацыях.',
     nokey: 'Карта падключаецца ключом Яндэкс Карт: дадайце VITE_YANDEX_MAPS_KEY у frontend/.env.local і перазапусціце сайт.',
     route: 'Маршрут',
     you: 'Вы тут',
@@ -103,34 +106,54 @@ const esc = (s: string) => s.replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&l
 const fmt = (m: number) =>
   m < 1000 ? `${Math.max(10, Math.round(m / 10) * 10)} м` : `${(m / 1000).toFixed(1).replace('.', ',')} км`;
 
-async function searchCategory(ymaps: any, cat: Category, c: Coords): Promise<Omit<Place, 'cats'>[]> {
-  const dLat = 0.15;
-  const dLon = 0.25;
-  const res = await ymaps.search(cat.query, {
-    boundedBy: [
-      [c[0] - dLat, c[1] - dLon],
-      [c[0] + dLat, c[1] + dLon],
-    ],
-    strictBounds: true,
-    results: 15,
+function distance(a: Coords, b: Coords): number {
+  const rad = Math.PI / 180;
+  const dLat = (b[0] - a[0]) * rad;
+  const dLon = (b[1] - a[1]) * rad;
+  const h = Math.sin(dLat / 2) ** 2 + Math.cos(a[0] * rad) * Math.cos(b[0] * rad) * Math.sin(dLon / 2) ** 2;
+  return 2 * 6371000 * Math.asin(Math.sqrt(h));
+}
+
+async function searchCategory(cat: Category, c: Coords): Promise<Omit<Place, 'cats'>[]> {
+  const params = new URLSearchParams({
+    apikey: SEARCH_KEY ?? '',
+    text: cat.query,
+    type: 'biz',
+    lang: 'ru_RU',
+    ll: `${c[1]},${c[0]}`,
+    spn: '0.5,0.3',
+    rspn: '1',
+    results: '20',
   });
+  const res = await fetch(`https://search-maps.yandex.ru/v1/?${params.toString()}`);
+  if (!res.ok) {
+    let detail = '';
+    try {
+      detail = String((await res.json()).message ?? '');
+    } catch {
+      /* тело ответа не JSON */
+    }
+    throw new Error(`HTTP ${res.status}${detail ? `: ${detail}` : ''}`);
+  }
+  const data = await res.json();
   const out: Omit<Place, 'cats'>[] = [];
-  res.geoObjects.each((o: any) => {
-    const meta = o.properties.get('CompanyMetaData') ?? {};
-    const name = String(meta.name ?? o.properties.get('name') ?? '');
+  for (const f of data.features ?? []) {
+    const meta = f.properties?.CompanyMetaData ?? {};
+    const name = String(meta.name ?? f.properties?.name ?? '');
     const rubrics = (meta.Categories ?? []).map((x: any) => x.name).join(' ');
-    if (!name || !cat.match.test(`${name} ${rubrics}`)) return;
-    const coords = o.geometry.getCoordinates() as Coords;
+    if (!name || !cat.match.test(`${name} ${rubrics}`)) continue;
+    const [lon, lat] = f.geometry.coordinates as [number, number];
+    const coords: Coords = [lat, lon];
     out.push({
-      id: String(meta.id ?? `${name}-${coords.join(',')}`),
+      id: String(meta.id ?? `${name}-${lat},${lon}`),
       name,
-      address: String(meta.address ?? o.properties.get('description') ?? ''),
+      address: String(meta.address ?? f.properties?.description ?? ''),
       coords,
-      dist: ymaps.coordSystem.geo.getDistance(c, coords),
+      dist: distance(c, coords),
       hours: meta.Hours?.text,
       phone: meta.Phones?.[0]?.formatted,
     });
-  });
+  }
   return out;
 }
 
@@ -144,6 +167,7 @@ export default function NearbyMap({ lang }: { lang: Lang }) {
   const [origin, setOrigin] = useState<Origin | null>(null);
   const [denied, setDenied] = useState(false);
   const [status, setStatus] = useState<Status>('idle');
+  const [errorText, setErrorText] = useState('');
   const [all, setAll] = useState<Place[]>([]);
   const [cat, setCat] = useState('all');
   const [active, setActive] = useState<string | null>(null);
@@ -193,33 +217,33 @@ export default function NearbyMap({ lang }: { lang: Lang }) {
   }, [locate]);
 
   useEffect(() => {
-    if (!KEY || !origin) return;
+    if (!KEY || !SEARCH_KEY || !origin) return;
     let cancelled = false;
     setStatus('searching');
+    setErrorText('');
     setActive(null);
-    loadYmaps(KEY)
-      .then((ymaps) => Promise.allSettled(CATEGORIES.map((c) => searchCategory(ymaps, c, origin.coords))))
-      .then((results) => {
-        if (cancelled) return;
-        if (results.every((r) => r.status === 'rejected')) {
-          setStatus('error');
-          return;
-        }
-        const merged = new Map<string, Place>();
-        results.forEach((r, i) => {
-          if (r.status !== 'fulfilled') return;
-          r.value.forEach((p) => {
-            const prev = merged.get(p.id);
-            if (prev) prev.cats.push(CATEGORIES[i].id);
-            else merged.set(p.id, { ...p, cats: [CATEGORIES[i].id] });
-          });
+    Promise.allSettled(CATEGORIES.map((c) => searchCategory(c, origin.coords))).then((results) => {
+      if (cancelled) return;
+      const failed = results.filter((r): r is PromiseRejectedResult => r.status === 'rejected');
+      if (failed.length === results.length) {
+        const reason = failed[0].reason;
+        console.error('[NearbyMap] search failed', reason);
+        setErrorText(reason instanceof Error ? reason.message : String(reason));
+        setStatus('error');
+        return;
+      }
+      const merged = new Map<string, Place>();
+      results.forEach((r, i) => {
+        if (r.status !== 'fulfilled') return;
+        r.value.forEach((p) => {
+          const prev = merged.get(p.id);
+          if (prev) prev.cats.push(CATEGORIES[i].id);
+          else merged.set(p.id, { ...p, cats: [CATEGORIES[i].id] });
         });
-        setAll([...merged.values()].filter((p) => p.dist <= MAX_DIST).sort((a, b) => a.dist - b.dist));
-        setStatus('ready');
-      })
-      .catch(() => {
-        if (!cancelled) setStatus('error');
       });
+      setAll([...merged.values()].filter((p) => p.dist <= MAX_DIST).sort((a, b) => a.dist - b.dist));
+      setStatus('ready');
+    });
     return () => {
       cancelled = true;
     };
@@ -321,7 +345,17 @@ export default function NearbyMap({ lang }: { lang: Lang }) {
                 {denied && status !== 'locating' && <p className='nearby-note'>{t.denied}</p>}
                 {status === 'locating' && <p className='nearby-note'>{t.locating}</p>}
                 {status === 'searching' && <p className='nearby-note'>{t.searching}</p>}
-                {status === 'error' && <p className='nearby-note is-error'>{t.error}</p>}
+                {status === 'error' && (
+                  <p className='nearby-note is-error'>
+                    {t.error}
+                    {errorText && (
+                      <>
+                        <br />
+                        <small>{errorText}</small>
+                      </>
+                    )}
+                  </p>
+                )}
                 {status === 'ready' && shown.length === 0 && <p className='nearby-note'>{t.empty}</p>}
               </div>
               <ul className='nearby-list'>
