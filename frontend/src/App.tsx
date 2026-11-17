@@ -11,6 +11,7 @@ import { useAsync, type AsyncState } from './hooks';
 import { LangCtx, useT, type Lang } from './i18n';
 import { BrandMark } from './icons';
 import { KioskApp } from './Kiosk';
+import NearbyMap from './NearbyMap';
 import { Home, NotFound, ServicePage, SituationPage } from './pages';
 import { useRoute } from './router';
 import { stopSpeaking } from './speech';
@@ -175,7 +176,12 @@ function Shell() {
             </div>
           </header>
           <main id='main' tabIndex={-1}>
-            {route.name === 'home' && <Home />}
+            {route.name === 'home' && (
+              <>
+                <Home />
+                <NearbyMap lang={lang} />
+              </>
+            )}
             {route.name === 'news' && <News lang={lang} />}
             {route.name === 'situation' && <SituationPage id={route.id} />}
             {route.name === 'service' && <ServicePage id={route.id} />}

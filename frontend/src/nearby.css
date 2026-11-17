@@ -1,0 +1,185 @@
+/* Блок «Госуслуги рядом»: палитра и радиусы из brand.css, карточки как у .svc и .sources. */
+
+.nearby .sec-head {
+  margin-bottom: 18px;
+}
+
+.nearby-bar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 14px;
+}
+
+.nearby-bar .chips {
+  margin: 0;
+}
+
+.nearby .chip[aria-pressed='true'] {
+  background: var(--primary);
+  border-color: transparent;
+  color: #ffffff;
+  box-shadow: 0 4px 12px rgba(37, 99, 235, 0.3);
+}
+
+.nearby-locate {
+  min-height: 42px;
+  padding: 0 16px;
+}
+
+.nearby-card {
+  display: grid;
+  grid-template-columns: minmax(0, 1.5fr) minmax(300px, 1fr);
+  height: 480px;
+  overflow: hidden;
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: var(--radius, 12px);
+  box-shadow: var(--lift);
+}
+
+.nearby-map {
+  min-height: 0;
+  background: linear-gradient(135deg, #eef3ff, #e8eefb);
+}
+
+.nearby-list-wrap {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  border-left: 1px solid var(--line);
+}
+
+.nearby-note {
+  margin: 12px 12px 0;
+  padding: 10px 12px;
+  background: #eef3ff;
+  border-radius: var(--radius, 12px);
+  color: var(--ink);
+  font-size: 14px;
+}
+
+.nearby-note.is-error {
+  background: var(--err-bg);
+  color: var(--err);
+}
+
+.nearby-list {
+  flex: 1;
+  margin: 0;
+  padding: 8px;
+  list-style: none;
+  overflow-y: auto;
+  scrollbar-width: thin;
+  scrollbar-color: rgba(37, 99, 235, 0.35) transparent;
+}
+
+.nearby-item {
+  display: grid;
+  grid-template-columns: 36px 1fr auto;
+  align-items: start;
+  gap: 12px;
+  width: 100%;
+  padding: 12px;
+  text-align: left;
+  background: transparent;
+  border: 0;
+  border-left: 3px solid transparent;
+  border-radius: var(--radius, 12px);
+  cursor: pointer;
+  transition:
+    background-color 0.3s var(--ease, ease),
+    border-color 0.3s var(--ease, ease);
+}
+
+.nearby-item:hover {
+  background: #f2f5ff;
+}
+
+.nearby-item[aria-current='true'] {
+  background: #eef3ff;
+  border-left-color: var(--primary);
+}
+
+.nearby-pin {
+  display: grid;
+  place-items: center;
+  width: 36px;
+  height: 36px;
+  color: var(--primary);
+  background: #eef3ff;
+  border-radius: var(--radius, 12px);
+}
+
+.nearby-item[aria-current='true'] .nearby-pin {
+  color: #ffffff;
+  background: var(--primary);
+  box-shadow: 0 4px 12px rgba(37, 99, 235, 0.3);
+}
+
+.nearby-info strong {
+  display: block;
+  color: var(--ink);
+  font-size: 15px;
+  line-height: 1.35;
+}
+
+.nearby-info small {
+  display: block;
+  margin-top: 2px;
+  color: var(--ink-2);
+  font-size: 13px;
+}
+
+.nearby-dist {
+  color: var(--primary);
+  font-size: 13px;
+  font-weight: 700;
+  white-space: nowrap;
+}
+
+.nearby-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 14px;
+  padding: 0 12px 12px 63px;
+  font-size: 14px;
+  font-weight: 600;
+}
+
+.nearby-actions a {
+  color: var(--primary);
+  text-decoration: none;
+}
+
+.nearby-actions a:hover {
+  text-decoration: underline;
+}
+
+.nearby-credit {
+  margin-top: 10px;
+  font-size: 13px;
+}
+
+@media (max-width: 860px) {
+  .nearby-card {
+    grid-template-columns: 1fr;
+    height: auto;
+  }
+
+  .nearby-map {
+    height: 320px;
+  }
+
+  .nearby-list-wrap {
+    max-height: 420px;
+    border-left: 0;
+    border-top: 1px solid var(--line);
+  }
+
+  .nearby-actions {
+    padding-left: 12px;
+  }
+}
