@@ -1,4 +1,5 @@
-/* Блок «Госуслуги рядом»: палитра и радиусы из brand.css, карточки как у .svc и .sources. */
+/* Блок «Госуслуги рядом»: карта и каждое учреждение – отдельные карточки в том же стиле, что .svc и .tile
+   (базовый вид задаётся в unify.css). */
 
 .nearby .sec-head {
   margin-bottom: 18px;
@@ -29,34 +30,34 @@
   padding: 0 16px;
 }
 
+/* Без общей рамки: карта и карточки учреждений стоят рядом как отдельные карточки. */
 .nearby-card {
   display: grid;
   grid-template-columns: minmax(0, 1.5fr) minmax(300px, 1fr);
+  gap: 14px;
   height: 480px;
-  overflow: hidden;
-  background: var(--surface);
-  border: 1px solid var(--line);
-  border-radius: var(--radius, 12px);
-  box-shadow: var(--lift);
 }
 
 .nearby-map {
   min-height: 0;
+  overflow: hidden;
   background: linear-gradient(135deg, #eef3ff, #e8eefb);
+  border: 1px solid #dce3f5;
+  border-radius: var(--radius, 16px);
+  box-shadow: var(--glass-shadow, 0 12px 30px rgba(35, 56, 131, 0.08));
 }
 
 .nearby-list-wrap {
   display: flex;
   flex-direction: column;
   min-height: 0;
-  border-left: 1px solid var(--line);
 }
 
 .nearby-note {
-  margin: 12px 12px 0;
+  margin: 0 6px 10px;
   padding: 10px 12px;
   background: #eef3ff;
-  border-radius: var(--radius, 12px);
+  border-radius: var(--radius, 16px);
   color: var(--ink);
   font-size: 14px;
 }
@@ -68,12 +69,36 @@
 
 .nearby-list {
   flex: 1;
+  display: grid;
+  align-content: start;
+  gap: 10px;
   margin: 0;
-  padding: 8px;
+  padding: 6px;
   list-style: none;
   overflow-y: auto;
   scrollbar-width: thin;
   scrollbar-color: rgba(37, 99, 235, 0.35) transparent;
+}
+
+/* Карточка учреждения: ведёт себя как .svc – приподнимается при наведении. */
+.nearby-list > li {
+  transition:
+    border-color 0.28s var(--ease, ease),
+    box-shadow 0.4s var(--ease, ease),
+    transform 0.4s var(--ease, ease);
+}
+
+@media (hover: hover) {
+  .nearby-list > li:hover {
+    transform: translateY(-3px);
+    box-shadow: var(--lift);
+    border-color: rgba(37, 99, 235, 0.45);
+  }
+}
+
+.nearby-list > li:has(.nearby-item[aria-current='true']) {
+  border-color: var(--primary);
+  box-shadow: var(--lift);
 }
 
 .nearby-item {
@@ -82,21 +107,12 @@
   align-items: start;
   gap: 12px;
   width: 100%;
-  padding: 12px;
+  padding: 16px;
   text-align: left;
   background: transparent;
   border: 0;
-  border-radius: var(--radius, 12px);
+  border-radius: var(--radius, 16px);
   cursor: pointer;
-  transition: background-color 0.3s var(--ease, ease);
-}
-
-.nearby-item:hover {
-  background: #f2f5ff;
-}
-
-.nearby-item[aria-current='true'] {
-  background: #eef3ff;
 }
 
 .nearby-pin {
@@ -106,7 +122,7 @@
   height: 36px;
   color: var(--primary);
   background: #eef3ff;
-  border-radius: var(--radius, 12px);
+  border-radius: var(--radius, 16px);
 }
 
 .nearby-item[aria-current='true'] .nearby-pin {
@@ -118,15 +134,19 @@
 .nearby-info strong {
   display: block;
   color: var(--ink);
-  font-size: 15px;
-  line-height: 1.35;
+  font-family: var(--serif);
+  font-size: 18px;
+  font-weight: 600;
+  letter-spacing: -0.02em;
+  line-height: 1.15;
 }
 
 .nearby-info small {
   display: block;
-  margin-top: 2px;
+  margin-top: 4px;
   color: var(--ink-2);
-  font-size: 13px;
+  font-size: 14px;
+  line-height: 1.45;
 }
 
 .nearby-dist {
@@ -140,7 +160,7 @@
   display: flex;
   flex-wrap: wrap;
   gap: 14px;
-  padding: 0 12px 12px 60px;
+  padding: 0 16px 16px 64px;
   font-size: 14px;
   font-weight: 600;
 }
@@ -170,12 +190,10 @@
   }
 
   .nearby-list-wrap {
-    max-height: 420px;
-    border-left: 0;
-    border-top: 1px solid var(--line);
+    max-height: 460px;
   }
 
   .nearby-actions {
-    padding-left: 12px;
+    padding-left: 16px;
   }
 }

@@ -1,0 +1,17 @@
+/* Единый стиль: одинаковые карточки и скругления во всём интерфейсе. Подключается последним. */
+
+/* Переключатель языка: тот же радиус, что у кнопок и карточек; активная заливка не выходит за углы. */
+.lang,
+.k-lang {
+  border-radius: var(--radius);
+  overflow: hidden;
+}
+
+/* Один вид для всех карточек: белая подложка, тонкая рамка, тот же радиус и тень.
+   Бывшая цветная полоска слева у «Источников» убрана так же, как у карточек на карте. */
+:is(.tile, .svc, .k-tile, .route-card, .channel, .facts > div, .sources li, .nearby-list > li) {
+  background: #ffffff;
+  border: 1px solid #dce3f5;
+  border-radius: var(--radius);
+  box-shadow: var(--glass-shadow);
+}
