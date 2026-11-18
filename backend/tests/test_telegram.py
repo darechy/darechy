@@ -42,7 +42,8 @@ def test_text_uses_authenticated_chat_and_keeps_sessions_separate(monkeypatch) -
         })
 
     async def telegram_request(self, bot, method, timeout=None):
-        sent_texts.append(method.text)
+        if method.__api_method__ == "sendMessage":
+            sent_texts.append(method.text)
 
     monkeypatch.setattr("aiogram.client.session.aiohttp.AiohttpSession.make_request", telegram_request)
 
@@ -66,10 +67,13 @@ def test_text_uses_authenticated_chat_and_keeps_sessions_separate(monkeypatch) -
     assert request_bodies[0]["session_id"] == request_bodies[1]["session_id"]
     assert request_bodies[0]["session_id"] != request_bodies[2]["session_id"]
     assert all(len(body["session_id"]) == 64 for body in request_bodies)
-    assert sent_texts == [
-        "Ответ с символами < и &\n\nИсточники\n1. Тестовый акт, п. 1\n"
-        "«Цитата нормы.»\nhttps://example.invalid/law",
-    ] * 3
+    answer = "💬 Ответ с символами &lt; и &amp;"
+    sources = (
+        "📚 <b>Источники</b>\n\n1. <b>Тестовый акт</b>, п. 1\n"
+        "<i>«Цитата нормы.»</i>\n"
+        '🔗 <a href="https://example.invalid/law">Открыть документ</a>'
+    )
+    assert sent_texts == [answer, sources] * 3
 
 
 def test_voice_preserves_text_when_synthesis_is_unavailable(monkeypatch) -> None:
@@ -115,4 +119,33 @@ def test_voice_preserves_text_when_synthesis_is_unavailable(monkeypatch) -> None
 
     asyncio.run(run())
     assert paths == ["/api/v1/voice/transcribe", "/api/v1/chat", "/api/v1/voice/synthesize"]
-    assert telegram_methods == ["sendMessage", "editMessageText", "sendMessage"]
+    assert telegram_methods == ["sendMessage", "editMessageText", "sendChatAction", "sendMessage"]
+
+
+def test_start_sends_welcome_with_menu_and_example_buttons(monkeypatch) -> None:
+    sent = []
+
+    def handle(request: httpx.Request) -> httpx.Response:
+        raise AssertionError("API не должен вызываться на /start")
+
+    async def telegram_request(self, bot, method, timeout=None):
+        sent.append((method.__api_method__, method.reply_markup))
+
+    monkeypatch.setattr("aiogram.client.session.aiohttp.AiohttpSession.make_request", telegram_request)
+
+    async def run() -> None:
+        async with (
+            Bot("123456789:test") as bot,
+            httpx.AsyncClient(
+                base_url="http://api.test", transport=httpx.MockTransport(handle),
+            ) as client,
+        ):
+            dp = build_dispatcher(KnowledgeApi(client))
+            await dp.feed_update(bot, update(
+                1, 10, text="/start", entities=[{"type": "bot_command", "offset": 0, "length": 6}],
+            ))
+
+    asyncio.run(run())
+    assert [name for name, _ in sent] == ["sendMessage", "sendMessage"]
+    assert sent[0][1].keyboard[0][0].text == "💡 Примеры вопросов"
+    assert len(sent[1][1].inline_keyboard) == 6
